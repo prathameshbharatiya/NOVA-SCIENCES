@@ -43,7 +43,8 @@ const App: React.FC = () => {
         });
       }
     } catch (err: any) {
-      setError('System busy. Retrying connection...');
+      console.error(err);
+      setError(`Search Error: ${err.message || 'System busy'}`);
     } finally {
       setIsSearching(false);
     }
@@ -59,7 +60,8 @@ const App: React.FC = () => {
       const data = await searchProtein(searchQuery);
       setCurrentProtein({ ...data, isValidatedReference: false });
     } catch (err: any) {
-      setError('Could not resolve protein. Try a UniProt ID.');
+      console.error(err);
+      setError(`Resolve Error: ${err.message || 'Could not resolve protein'}`);
     } finally {
       setIsSearching(false);
     }
@@ -77,7 +79,8 @@ const App: React.FC = () => {
       setResult(pred);
       setDecisionMemo(memo);
     } catch (err: any) {
-      setError('Decision Engine timeout. Please simplify parameters.');
+      console.error(err);
+      setError(`Decision Engine Error: ${err.message || 'Timeout'}`);
     } finally {
       setIsPredicting(false);
     }
@@ -352,13 +355,13 @@ const App: React.FC = () => {
         )}
 
         {error && (
-          <div className="fixed bottom-10 right-10 bg-rose-600 text-white px-8 py-5 rounded-[1.5rem] shadow-2xl flex items-center gap-4 z-50 animate-in fade-in slide-in-from-right-4 border-2 border-rose-500">
+          <div className="fixed bottom-10 right-10 bg-rose-600 text-white px-8 py-5 rounded-[1.5rem] shadow-2xl flex items-center gap-4 z-50 animate-in fade-in slide-in-from-right-4 border-2 border-rose-500 max-w-md">
              <i className="fa-solid fa-circle-exclamation text-2xl"></i>
              <div className="flex flex-col">
                <span className="text-[10px] font-black uppercase tracking-wider opacity-80">System Alert</span>
-               <div className="text-[12px] font-bold uppercase">{error}</div>
+               <div className="text-[11px] font-bold uppercase break-words">{error}</div>
              </div>
-             <button onClick={() => setError(null)} className="ml-4 hover:scale-110 transition-transform"><i className="fa-solid fa-xmark text-lg"></i></button>
+             <button onClick={() => setError(null)} className="ml-4 hover:scale-110 transition-transform shrink-0"><i className="fa-solid fa-xmark text-lg"></i></button>
           </div>
         )}
       </main>

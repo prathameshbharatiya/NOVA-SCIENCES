@@ -1,15 +1,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Standard model definitions for Gemini 3
+// Using the specified models for the task type
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
 const getAIClient = () => {
-  // Use the environment variable directly. Vite will replace this string during build.
+  // Use the environment variable directly. Vite will replace this string during the build step.
   const apiKey = process.env.API_KEY;
   if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    throw new Error("API_KEY is not available. Please ensure it is set in your environment variables and the project is re-deployed.");
+    throw new Error("The API_KEY is currently missing or invalid. Please verify that the environment variable is correctly set and re-deploy.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -56,7 +56,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
 
     const text = response.text;
     if (!text) {
-      throw new Error("AI returned empty content.");
+      throw new Error("The protein database search returned an empty result.");
     }
 
     const parsed = JSON.parse(text.trim());
@@ -81,12 +81,17 @@ export const predictMutation = async (
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
-    : "None";
+    : "No prior experimental data provided.";
 
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_FAST,
-      contents: `Predict mutation ${mutationStr} for ${protein.name}. Goal: ${goal}. Memory: ${memoryStr}. Reference Context: ${protein.referenceContext || 'None'}. Provide detailed structural risk assessment and Delta Delta G (kcal/mol).`,
+      contents: `Predict the effects of mutation ${mutationStr} for protein ${protein.name}.
+      PRIMARY GOAL: ${goal}
+      EXPERIMENTAL MEMORY: ${memoryStr}
+      CONTEXT: ${protein.referenceContext || 'General protein engineering context'}
+      
+      Predict the Delta Delta G (kcal/mol), stability impact, and provide a deep structural rationale.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -118,7 +123,7 @@ export const predictMutation = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("AI returned empty prediction content.");
+    if (!text) throw new Error("The mutation analysis returned an empty result.");
 
     const baseResult = JSON.parse(text.trim());
     const runId = `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
@@ -132,12 +137,12 @@ export const predictMutation = async (
         modelName: "novasciences-Iterative-Engine",
         modelVersion: "0.2.5v",
         inputHash: `SHA256:${Math.random().toString(16).substring(2, 12)}`,
-        dockerImageHash: "ns-predict:v0.2.5v-deep-rationale",
+        dockerImageHash: "ns-predict:v0.2.5v-thermo-engine",
         structureSource: protein.structureStatus === 'available' ? protein.sourceType : 'Sequence-Heuristic',
         structureSourceDetails: protein.structureStatus === 'available' ? `Resolved Structure` : "Heuristic Only",
         viewerVersion: "3Dmol.js v2.0.4"
       },
-      disclaimer: "Computational estimate. Results should be cross-verified with laboratory assay data."
+      disclaimer: "This is a computational estimate. Results must be cross-verified with laboratory assay data."
     };
   } catch (err: any) {
     console.error("Gemini Prediction Error:", err);
@@ -153,12 +158,15 @@ export const generateDecisionMemo = async (
   const ai = getAIClient();
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
-    : "None";
+    : "No prior experimental data provided.";
 
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_PRO,
-      contents: `Produce Decision Memo for ${protein.name}. Goal: ${goal}. Memory: ${memoryStr}. Context: ${protein.referenceContext || 'None'}.`,
+      contents: `Produce a high-level Decision Memo for ${protein.name}.
+      GOAL: ${goal}
+      MEMORY: ${memoryStr}
+      CONTEXT: ${protein.referenceContext || 'Standard protein engineering principles'}`,
       config: {
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 4000 },
@@ -202,7 +210,7 @@ export const generateDecisionMemo = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("AI returned empty memo content.");
+    if (!text) throw new Error("The Decision Memo engine returned an empty result.");
     return JSON.parse(text.trim());
   } catch (err: any) {
     console.error("Gemini Memo Error:", err);

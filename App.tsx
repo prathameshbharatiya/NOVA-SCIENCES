@@ -1,11 +1,10 @@
-
 import React, { useState, useRef } from 'react';
 import { Mutation, PredictionResult, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo as DecisionMemoType } from './types';
 import { AMINO_ACIDS, REFERENCE_PROTEINS, ReferenceProtein } from './constants';
 import { predictMutation, searchProtein, generateDecisionMemo } from './services/geminiService';
 import MutationCard from './components/MutationCard';
 import DecisionMemo from './components/DecisionMemo';
-import ProteinViewer, { ProteinViewerHandle } from './ProteinViewer';
+import ProteinViewer, { ProteinViewerHandle } from './components/ProteinViewer';
 
 const App: React.FC = () => {
   const [currentProtein, setCurrentProtein] = useState<ProteinMetadata | null>(null);

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { Mutation, StructureStatus } from './types';
 

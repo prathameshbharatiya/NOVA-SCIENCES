@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { Mutation, StructureStatus } from '../types';
 
@@ -283,10 +282,22 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
         <div className="absolute bottom-4 left-4 z-20 pointer-events-none p-4 bg-slate-950/60 backdrop-blur-sm rounded-2xl border border-white/5 animate-in fade-in slide-in-from-left-2">
           <h5 className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">pLDDT Confidence</h5>
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#0053D6]"></div><span className="text-[8px] font-bold text-white uppercase">Very High (>90)</span></div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#65CBF3]"></div><span className="text-[8px] font-bold text-white uppercase">Confident (70-90)</span></div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#FFDB13]"></div><span className="text-[8px] font-bold text-white uppercase">Low (50-70)</span></div>
-            <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#FF7D45]"></div><span className="text-[8px] font-bold text-white uppercase">Very Low (<50)</span></div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-[#0053D6]"></div>
+              <span className="text-[8px] font-bold text-white uppercase">Very High ({' > 90'})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-[#65CBF3]"></div>
+              <span className="text-[8px] font-bold text-white uppercase">Confident (70-90)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-[#FFDB13]"></div>
+              <span className="text-[8px] font-bold text-white uppercase">Low (50-70)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-[#FF7D45]"></div>
+              <span className="text-[8px] font-bold text-white uppercase">Very Low ({' < 50'})</span>
+            </div>
           </div>
         </div>
       )}

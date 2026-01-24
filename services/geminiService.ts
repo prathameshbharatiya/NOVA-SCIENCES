@@ -5,18 +5,20 @@ import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResul
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
-// Initialize the AI client using the environment variable. 
-// Vite will replace this string during the build step.
-const getAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("The API key is missing. Please check your environment variables and re-deploy.");
+/**
+ * Validates and returns the API key from the environment.
+ * The environment variable process.env.API_KEY is injected by the build system.
+ */
+const getApiKey = (): string => {
+  const key = process.env.API_KEY;
+  if (!key || key === "undefined" || key === "") {
+    throw new Error("API_KEY is missing. Ensure the environment variable is set and the application is re-deployed.");
   }
-  return new GoogleGenAI({ apiKey });
+  return key;
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const ai = getAI();
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   
   try {
     const response = await ai.models.generateContent({
@@ -56,9 +58,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     });
 
     const text = response.text;
-    if (!text) {
-      throw new Error("No protein metadata returned from the model.");
-    }
+    if (!text) throw new Error("Empty response from protein search.");
 
     const parsed = JSON.parse(text.trim());
     return {
@@ -78,7 +78,7 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const ai = getAI();
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
@@ -124,7 +124,7 @@ export const predictMutation = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("Mutation prediction response was empty.");
+    if (!text) throw new Error("Empty response from mutation prediction.");
 
     const baseResult = JSON.parse(text.trim());
     const runId = `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
@@ -156,7 +156,7 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const ai = getAI();
+  const ai = new GoogleGenAI({ apiKey: getApiKey() });
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
     : "No prior experimental data provided.";
@@ -211,7 +211,7 @@ export const generateDecisionMemo = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("Decision memo engine returned an empty result.");
+    if (!text) throw new Error("Empty response from decision memo engine.");
     return JSON.parse(text.trim());
   } catch (err: any) {
     console.error("Gemini Memo Error:", err);

@@ -1,13 +1,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
+// Standard model definitions for Gemini 3
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
 const getAIClient = () => {
+  // Use the environment variable directly. Vite will replace this string during build.
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API_KEY is missing. Please check your environment variables.");
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
+    throw new Error("API_KEY is not available. Please ensure it is set in your environment variables and the project is re-deployed.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -52,11 +54,12 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
       }
     });
 
-    if (!response.text) {
-      throw new Error("The AI returned an empty response. Please try a different protein.");
+    const text = response.text;
+    if (!text) {
+      throw new Error("AI returned empty content.");
     }
 
-    const parsed = JSON.parse(response.text.trim());
+    const parsed = JSON.parse(text.trim());
     return {
       ...parsed,
       sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold',
@@ -78,23 +81,12 @@ export const predictMutation = async (
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
-    : "No prior experimental outcomes provided.";
-
-  const mode = protein.isValidatedReference ? "Validated Reference Mode" : "General Reasoning Mode";
-  const context = protein.referenceContext ? `LITERATURE CONTEXT: ${protein.referenceContext}` : "Using general protein engineering principles.";
+    : "None";
 
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_FAST,
-      contents: `Analyze mutation ${mutationStr} in ${protein.name}.
-      MODE: ${mode}
-      ${context}
-      SCIENTIFIC GOAL: ${goal}
-      EXPERIMENTAL MEMORY: ${memoryStr}
-      
-      Evaluate Delta Delta G, stability impact, and alignment with the GOAL.
-      REFINE RATIONALE: Provide a deep structural/chemical explanation for WHY this mutation matters (justification).
-      RISK ASSESSMENT: Explicitly define the functional or structural RISKS (riskBreakdown).`,
+      contents: `Predict mutation ${mutationStr} for ${protein.name}. Goal: ${goal}. Memory: ${memoryStr}. Reference Context: ${protein.referenceContext || 'None'}. Provide detailed structural risk assessment and Delta Delta G (kcal/mol).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -118,22 +110,17 @@ export const predictMutation = async (
             reportSummary: { type: Type.STRING },
             goalAlignment: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
             tradeOffAnalysis: { type: Type.STRING },
-            justification: { type: Type.STRING },
-            guardrails: {
-              type: Type.OBJECT,
-              properties: {
-                isLargeProtein: { type: Type.BOOLEAN },
-                isInDisorderedRegion: { type: Type.BOOLEAN },
-                isLowConfidenceSite: { type: Type.BOOLEAN }
-              }
-            }
+            justification: { type: Type.STRING }
           },
           required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "relativeRank", "goalAlignment", "tradeOffAnalysis", "justification", "riskBreakdown"]
         }
       }
     });
 
-    const baseResult = JSON.parse(response.text?.trim() || "{}");
+    const text = response.text;
+    if (!text) throw new Error("AI returned empty prediction content.");
+
+    const baseResult = JSON.parse(text.trim());
     const runId = `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
     
     return { 
@@ -150,7 +137,7 @@ export const predictMutation = async (
         structureSourceDetails: protein.structureStatus === 'available' ? `Resolved Structure` : "Heuristic Only",
         viewerVersion: "3Dmol.js v2.0.4"
       },
-      disclaimer: "Computational estimate. Decisions should be cross-verified with assay data."
+      disclaimer: "Computational estimate. Results should be cross-verified with laboratory assay data."
     };
   } catch (err: any) {
     console.error("Gemini Prediction Error:", err);
@@ -166,22 +153,12 @@ export const generateDecisionMemo = async (
   const ai = getAIClient();
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
-    : "No prior experimental outcomes provided.";
-
-  const mode = protein.isValidatedReference ? "Validated Reference Mode" : "General Reasoning Mode";
-  const context = protein.referenceContext ? `REFERENCE SYSTEM CONTEXT: ${protein.referenceContext}` : "General Reasoning Only.";
+    : "None";
 
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_PRO,
-      contents: `Act as a senior protein scientist. Produce a Decision Memo for ${protein.name}.
-      MODE: ${mode}
-      ${context}
-      GOAL: ${goal}
-      PRIOR RESULTS: ${memoryStr}
-      
-      1. Identify 3 specific mutations to test next. Provide high-quality structural rationale for each.
-      2. Identify mutations to avoid and define the specific signal (e.g., Active site overlap, Clashes).`,
+      contents: `Produce Decision Memo for ${protein.name}. Goal: ${goal}. Memory: ${memoryStr}. Context: ${protein.referenceContext || 'None'}.`,
       config: {
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 4000 },
@@ -224,7 +201,9 @@ export const generateDecisionMemo = async (
       }
     });
 
-    return JSON.parse(response.text?.trim() || "{}");
+    const text = response.text;
+    if (!text) throw new Error("AI returned empty memo content.");
+    return JSON.parse(text.trim());
   } catch (err: any) {
     console.error("Gemini Memo Error:", err);
     throw err;

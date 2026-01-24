@@ -5,17 +5,18 @@ import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResul
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
-const getAIClient = () => {
-  // Use the environment variable directly. Vite will replace this string during the build step.
+// Initialize the AI client using the environment variable. 
+// Vite will replace this string during the build step.
+const getAI = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    throw new Error("The API_KEY is currently missing or invalid. Please verify that the environment variable is correctly set and re-deploy.");
+  if (!apiKey) {
+    throw new Error("The API key is missing. Please check your environment variables and re-deploy.");
   }
   return new GoogleGenAI({ apiKey });
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const ai = getAIClient();
+  const ai = getAI();
   
   try {
     const response = await ai.models.generateContent({
@@ -56,7 +57,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
 
     const text = response.text;
     if (!text) {
-      throw new Error("The protein database search returned an empty result.");
+      throw new Error("No protein metadata returned from the model.");
     }
 
     const parsed = JSON.parse(text.trim());
@@ -67,7 +68,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     } as ProteinMetadata;
   } catch (err: any) {
     console.error("Gemini Search Error:", err);
-    throw err;
+    throw new Error(err.message || "Protein resolution failed.");
   }
 };
 
@@ -77,7 +78,7 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const ai = getAIClient();
+  const ai = getAI();
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
@@ -123,7 +124,7 @@ export const predictMutation = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("The mutation analysis returned an empty result.");
+    if (!text) throw new Error("Mutation prediction response was empty.");
 
     const baseResult = JSON.parse(text.trim());
     const runId = `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
@@ -142,11 +143,11 @@ export const predictMutation = async (
         structureSourceDetails: protein.structureStatus === 'available' ? `Resolved Structure` : "Heuristic Only",
         viewerVersion: "3Dmol.js v2.0.4"
       },
-      disclaimer: "This is a computational estimate. Results must be cross-verified with laboratory assay data."
+      disclaimer: "Computational estimate. Results must be cross-verified with laboratory assay data."
     };
   } catch (err: any) {
     console.error("Gemini Prediction Error:", err);
-    throw err;
+    throw new Error(err.message || "Mutation analysis failed.");
   }
 };
 
@@ -155,7 +156,7 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const ai = getAIClient();
+  const ai = getAI();
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
     : "No prior experimental data provided.";
@@ -210,10 +211,10 @@ export const generateDecisionMemo = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("The Decision Memo engine returned an empty result.");
+    if (!text) throw new Error("Decision memo engine returned an empty result.");
     return JSON.parse(text.trim());
   } catch (err: any) {
     console.error("Gemini Memo Error:", err);
-    throw err;
+    throw new Error(err.message || "Failed to generate decision memo.");
   }
 };

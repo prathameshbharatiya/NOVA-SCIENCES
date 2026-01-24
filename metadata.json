@@ -1,0 +1,5 @@
+{
+  "name": "novasciences 0.2.5v",
+  "description": "An AI-powered protein mutation analysis tool focusing on p53 and MDM2. Predicts ΔΔG stability changes, structural impacts, and clinical relevance using Gemini's advanced biological reasoning.",
+  "requestFramePermissions": []
+}

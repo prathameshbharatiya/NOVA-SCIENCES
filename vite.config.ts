@@ -5,12 +5,14 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   define: {
-    // This shims process.env for the browser
-    'process.env': {
-      API_KEY: JSON.stringify(process.env.API_KEY)
-    }
+    // Specifically shim process.env.API_KEY for the browser environment
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
   },
   build: {
-    target: 'esnext'
+    target: 'esnext',
+    outDir: 'dist'
+  },
+  server: {
+    port: 3000
   }
 });

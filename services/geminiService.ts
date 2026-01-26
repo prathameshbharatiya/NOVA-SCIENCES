@@ -1,10 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Forcing gemini-3-flash-preview for high RPM availability
+// Force gemini-3-flash-preview for maximum availability and reliability
 const MODEL_NAME = "gemini-3-flash-preview";
 
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 3000): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2000): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -13,13 +13,10 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDel
       lastError = err;
       const status = err.status || 0;
       const msg = err.message?.toLowerCase() || "";
-      
       const isTransient = status === 503 || status === 429 || msg.includes("overloaded") || msg.includes("quota") || msg.includes("resource_exhausted");
       
       if (isTransient && i < maxRetries - 1) {
-        // More aggressive exponential backoff for quota issues
-        const delay = initialDelay * Math.pow(2.5, i);
-        console.warn(`Gemini Quota/Transient Error (${status}). Waiting ${delay}ms before retry ${i + 1}/${maxRetries}...`);
+        const delay = initialDelay * Math.pow(2, i);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -31,26 +28,20 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDel
 
 const extractText = (response: any, fallbackError: string): string => {
   if (response.candidates && response.candidates[0]?.finishReason === 'SAFETY') {
-    throw new Error("Biological safety filter blocked this analysis. Please try a standard UniProt ID.");
+    throw new Error("Biological safety filter triggered. Please use standard research identifiers.");
   }
   const text = response.text;
-  if (!text) {
-    console.error("Critical: Empty response from AI service", response);
-    throw new Error(fallbackError);
-  }
+  if (!text) throw new Error(fallbackError);
   return text;
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY missing from build context.");
-  
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Identify protein for query: "${query}". Provide UniProt ID, common PDB ID, and 6 relevant mutations.`,
+      contents: `Identify the protein for: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 relevant mutations.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -80,7 +71,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
       }
     });
 
-    const text = extractText(response, "Protein resolution failed.");
+    const text = extractText(response, "Failed to resolve protein data.");
     const parsed = JSON.parse(text);
     return { ...parsed, sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold', structureStatus: 'idle' };
   });
@@ -92,14 +83,13 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const apiKey = process.env.API_KEY;
-  const ai = new GoogleGenAI({ apiKey: apiKey! });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Perform thermodynamic analysis for ${mutationStr} in ${protein.name} (${protein.id}) focused on ${goal}.`,
+      contents: `Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -130,7 +120,7 @@ export const predictMutation = async (
       }
     });
 
-    const text = extractText(response, "Thermodynamic engine fault.");
+    const text = extractText(response, "Prediction engine timeout.");
     const baseResult = JSON.parse(text);
     return { 
       ...baseResult, 
@@ -140,13 +130,13 @@ export const predictMutation = async (
         timestamp: new Date().toISOString(),
         modelName: "Novasciences-Delta-Engine",
         modelVersion: "0.2.5v",
-        inputHash: "NATIVE-HASH",
+        inputHash: "NATIVE",
         dockerImageHash: "v0.2.5v-stable",
         structureSource: "Native",
         structureSourceDetails: "RCSB/AF",
         viewerVersion: "3Dmol.js"
       },
-      disclaimer: "Computational estimate only. Laboratory validation mandatory."
+      disclaimer: "Computational estimate only."
     };
   });
 };
@@ -156,12 +146,11 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const apiKey = process.env.API_KEY;
-  const ai = new GoogleGenAI({ apiKey: apiKey! });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Generate a decision memo for ${protein.name} for the goal of ${goal}.`,
+      contents: `Synthesize a scientific memo for ${protein.name} focusing on ${goal}.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {

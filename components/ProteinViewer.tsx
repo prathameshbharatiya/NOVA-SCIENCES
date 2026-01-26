@@ -66,9 +66,9 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     };
 
     const onError = (e: any) => {
-      console.warn('Structural resolve failed for:', cleanId, cleanPdb, e);
-      // Fallback for demo purposes if everything fails
-      if (cleanId === 'P04637') {
+      console.warn('Structure fetch failed for:', cleanId, cleanPdb, e);
+      // Final attempt: check if it's the reference p53, try to force a known good PDB
+      if (cleanId === 'P04637' || cleanPdb === '1TUP') {
         window.$3Dmol.download('pdb:1TUP', viewer, { onfinish: onFinish, onerror: () => {
           setLoading(false);
           setStatus('unavailable');
@@ -79,11 +79,17 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
       }
     };
 
-    // Use $3Dmol native downloaders as they handle CORS and proxying automatically
+    // Use $3Dmol's native protocol identifiers for robust remote fetching
     if (cleanPdb) {
       window.$3Dmol.download(`pdb:${cleanPdb}`, viewer, { onfinish: onFinish, onerror: onError });
     } else if (cleanId) {
-      window.$3Dmol.download(`afdb:${cleanId}`, viewer, { onfinish: onFinish, onerror: onError });
+      window.$3Dmol.download(`afdb:${cleanId}`, viewer, { 
+        onfinish: onFinish, 
+        onerror: () => {
+          // If AFDB fails, try fetching from PDB with the ID as a last ditch if applicable
+          window.$3Dmol.download(`pdb:${cleanId}`, viewer, { onfinish: onFinish, onerror: onError });
+        } 
+      });
     } else {
       setLoading(false);
       setStatus('unavailable');
@@ -122,7 +128,7 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-500 p-10 text-center">
            <i className="fa-solid fa-eye-slash text-4xl mb-4 text-rose-500"></i>
            <p className="text-[12px] font-black uppercase tracking-widest text-white mb-2">Structure Not Found</p>
-           <p className="text-[10px] font-medium max-w-xs opacity-60">The resolution system returned no compatible model for identifier: {uniprotId || pdbId}.</p>
+           <p className="text-[10px] font-medium max-w-xs opacity-60">The structural resolution engine could not locate a compatible model for identifier: {uniprotId || pdbId}.</p>
         </div>
       )}
     </div>

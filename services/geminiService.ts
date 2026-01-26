@@ -1,10 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Force all calls to use Flash to avoid Quota 0 issues common with Pro models in certain projects
-const MODEL_NAME = "gemini-3-flash-preview";
+// Using the stable alias 'gemini-flash-latest' to ensure maximum quota availability
+const MODEL_NAME = "gemini-flash-latest";
 
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 2, initialDelay = 1500): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2000): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -14,11 +14,11 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 2, initialDel
       const status = err.status || 0;
       const msg = err.message?.toLowerCase() || "";
       
-      const isTransient = status === 503 || status === 429 || msg.includes("overloaded") || msg.includes("quota");
+      const isTransient = status === 503 || status === 429 || msg.includes("overloaded") || msg.includes("quota") || msg.includes("resource_exhausted");
       
       if (isTransient && i < maxRetries - 1) {
         const delay = initialDelay * Math.pow(2, i);
-        console.warn(`Gemini API Transient Error (${status}). Retrying in ${delay}ms...`);
+        console.warn(`Gemini Request Error (${status}). Retrying in ${delay}ms (Attempt ${i + 1}/${maxRetries})...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -30,11 +30,11 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 2, initialDel
 
 const extractText = (response: any, fallbackError: string): string => {
   if (response.candidates && response.candidates[0]?.finishReason === 'SAFETY') {
-    throw new Error("Biological safety filter triggered. Try a different query.");
+    throw new Error("Bio-Safety Filter: This query was flagged and blocked by the model.");
   }
   const text = response.text;
-  if (!text) {
-    console.error("DEBUG: Empty Gemini Response", response);
+  if (!text || text.trim().length === 0) {
+    console.error("Critical: Received empty response body from Gemini API", response);
     throw new Error(fallbackError);
   }
   return text;
@@ -42,13 +42,14 @@ const extractText = (response: any, fallbackError: string): string => {
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key configuration error.");
+  if (!apiKey) throw new Error("Environment Error: API_KEY is undefined in the current context.");
+  
   const ai = new GoogleGenAI({ apiKey });
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Identify the protein for: "${query}". Return as JSON with UniProt ID, PDB ID, and 6 relevant mutations.`,
+      contents: `Identify protein for query: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 suggested mutations (residue, position, rationale, confidence).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -78,7 +79,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
       }
     });
 
-    const text = extractText(response, "Could not resolve protein structure metadata.");
+    const text = extractText(response, "Resolution Engine Failure: Received null payload from service.");
     const parsed = JSON.parse(text);
     return { ...parsed, sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold', structureStatus: 'idle' };
   });
@@ -90,13 +91,15 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY missing.");
+  const ai = new GoogleGenAI({ apiKey });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Perform thermodynamic analysis for ${mutationStr} in ${protein.name}. Goal: ${goal}.`,
+      contents: `Analyze mutation ${mutationStr} in ${protein.name} for goal: ${goal}.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -127,7 +130,7 @@ export const predictMutation = async (
       }
     });
 
-    const text = extractText(response, "Prediction engine timeout.");
+    const text = extractText(response, "Prediction Engine Fault: No valid thermodynamic data returned.");
     const baseResult = JSON.parse(text);
     return { 
       ...baseResult, 
@@ -137,13 +140,13 @@ export const predictMutation = async (
         timestamp: new Date().toISOString(),
         modelName: "Novasciences-Delta-Engine",
         modelVersion: "0.2.5v",
-        inputHash: "SHA256:NATIVE",
-        dockerImageHash: "v0.2.5v-thermo",
+        inputHash: "NATIVE-HASH",
+        dockerImageHash: "v0.2.5v-stable",
         structureSource: "Native",
-        structureSourceDetails: "AlphaFold/RCSB",
+        structureSourceDetails: "RCSB/AF",
         viewerVersion: "3Dmol.js"
       },
-      disclaimer: "Computational estimate only."
+      disclaimer: "Computational estimate only. Experimental validation required."
     };
   });
 };
@@ -153,11 +156,13 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY missing.");
+  const ai = new GoogleGenAI({ apiKey });
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Generate a decision memo for ${protein.name} optimization. Goal: ${goal}.`,
+      contents: `Synthesize a scientific decision memo for ${protein.name} optimization focusing on ${goal}.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {

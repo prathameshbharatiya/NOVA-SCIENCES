@@ -23,13 +23,14 @@ const App: React.FC = () => {
 
   const formatError = (err: any) => {
     const msg = err.message?.toLowerCase() || "";
+    const status = err.status || "Unknown";
     if (msg.includes("429") || msg.includes("quota") || msg.includes("resource_exhausted")) {
-      return "Quota Exceeded: Your current API key has no remaining requests or lacks access to the preview models. Please check your billing at ai.google.dev or try again in a few minutes.";
+      return `Quota Error (${status}): The API key has reached its request limit. Sequential processing enabled; please try again in 60 seconds.`;
     }
     if (msg.includes("503") || msg.includes("overloaded")) {
-      return "Gemini AI is currently under high load. We've tried retrying, but the server is still busy. Please wait a moment and try again.";
+      return `Service Overloaded (${status}): Google servers are currently busy. Retrying...`;
     }
-    return err.message || "An unexpected system error occurred.";
+    return `${err.message || "Unknown error"} [Status: ${status}]`;
   };
 
   const loadReference = async (ref: ReferenceProtein) => {
@@ -54,7 +55,7 @@ const App: React.FC = () => {
         });
       }
     } catch (err: any) {
-      setError(`Search Alert: ${formatError(err)}`);
+      setError(`Search Fault: ${formatError(err)}`);
     } finally {
       setIsSearching(false);
     }
@@ -70,7 +71,7 @@ const App: React.FC = () => {
       const data = await searchProtein(searchQuery);
       setCurrentProtein({ ...data, isValidatedReference: false });
     } catch (err: any) {
-      setError(`Resolution Failed: ${formatError(err)}`);
+      setError(`Resolution Fault: ${formatError(err)}`);
     } finally {
       setIsSearching(false);
     }
@@ -81,14 +82,14 @@ const App: React.FC = () => {
     setIsPredicting(true);
     setError(null);
     try {
-      const [pred, memo] = await Promise.all([
-        predictMutation(currentProtein, mutation, goal, priorResults),
-        generateDecisionMemo(currentProtein, goal, priorResults)
-      ]);
+      // SEQUENTIAL EXECUTION to avoid hitting concurrent request limits (429)
+      const pred = await predictMutation(currentProtein, mutation, goal, priorResults);
       setResult(pred);
+      
+      const memo = await generateDecisionMemo(currentProtein, goal, priorResults);
       setDecisionMemo(memo);
     } catch (err: any) {
-      setError(`Engine Delay: ${formatError(err)}`);
+      setError(`Analysis Error: ${formatError(err)}`);
     } finally {
       setIsPredicting(false);
     }
@@ -128,7 +129,6 @@ const App: React.FC = () => {
           .image-frame { background: #0f172a; border-radius: 20px; overflow: hidden; border: 1px solid #e2e8f0; text-align: center; }
           .image-frame img { width: 100%; display: block; border-bottom: 1px solid #334155; }
           .image-label { color: white; font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 12px; background: #0f172a; }
-          .risk-explainer { font-size: 12px; color: #475569; background: #f8fafc; padding: 15px; border-radius: 12px; margin-top: 10px; border: 1px dashed #cbd5e1; }
           .footer { text-align: center; padding: 40px; font-size: 11px; color: #64748b; font-style: italic; }
         </style>
       </head>
@@ -142,7 +142,6 @@ const App: React.FC = () => {
           <div class="section"><div class="title">Executive Summary</div><div class="box">${decisionMemo.summary}</div></div>
           <div class="section"><div class="title">Evidence Snapshots</div><div class="grid"><div class="image-frame"><img src="${full}" /><div class="image-label">Global Context</div></div><div class="image-frame"><img src="${zoomed}" /><div class="image-label">Site: ${result.mutation}</div></div></div></div>
           <div class="section"><div class="title">Thermodynamics</div><div class="box"><strong>&Delta;&Delta;G:</strong> ${result.deltaDeltaG.toFixed(2)} kcal/mol &bull; ${result.stabilityImpact}<p style="font-size: 13px; color: #334155; margin-top: 10px;">${result.justification}</p></div></div>
-          <div class="section"><div class="title">Risk Profile</div><div style="background:#fff1f2; border:2px solid #be123c; padding:25px; border-radius:24px; color:#9f1239; font-weight:600;">${result.riskBreakdown}</div></div>
           <div class="footer">CONFIDENTIAL PI MEMO &bull; ${result.disclaimer}</div>
         </div>
       </body>
@@ -233,15 +232,14 @@ const App: React.FC = () => {
                             </div>
                           </div>
                         ))}
-                        {priorResults.length === 0 && <div className="text-[10px] text-slate-500 font-bold italic p-4 text-center border-2 border-dashed border-slate-100 rounded-xl">No assays recorded yet.</div>}
                       </div>
                       <div className="flex gap-2 mb-3">
-                        <input type="text" value={newPrior.mut} onChange={(e) => setNewPrior({...newPrior, mut: e.target.value.toUpperCase()})} placeholder="e.g. L344P" className="flex-1 bg-white border-2 border-slate-200 py-2 px-3 rounded-lg text-[11px] font-black text-black focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <input type="text" value={newPrior.mut} onChange={(e) => setNewPrior({...newPrior, mut: e.target.value.toUpperCase()})} placeholder="e.g. L344P" className="flex-1 bg-white border-2 border-slate-200 py-2 px-3 rounded-lg text-[11px] font-black text-black outline-none" />
                         <select value={newPrior.outcome} onChange={(e) => setNewPrior({...newPrior, outcome: e.target.value as any})} className="bg-white border-2 border-slate-200 px-2 rounded-lg text-[11px] font-black text-black">
                           <option value="Positive">Pos</option><option value="Neutral">Neu</option><option value="Negative">Neg</option>
                         </select>
                       </div>
-                      <button onClick={addPriorResult} disabled={!newPrior.mut} className="w-full bg-slate-900 text-white py-3 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-600 transition-all disabled:opacity-30 shadow-md">Add Observation</button>
+                      <button onClick={addPriorResult} disabled={!newPrior.mut} className="w-full bg-slate-900 text-white py-3 rounded-lg text-[10px] font-black uppercase hover:bg-indigo-600 transition-all disabled:opacity-30">Add Observation</button>
                     </div>
                   </div>
                 </div>
@@ -282,7 +280,6 @@ const App: React.FC = () => {
                       <div className="h-full bg-white border-4 border-dashed border-slate-100 rounded-[2.5rem] flex flex-col items-center justify-center p-10 text-center text-slate-300 shadow-inner">
                         <i className="fa-solid fa-microchip text-5xl mb-6 text-slate-200"></i>
                         <h4 className="text-[12px] font-black uppercase text-slate-400 tracking-[0.2em]">System Ready</h4>
-                        <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase">Configure mutation parameters to start analysis.</p>
                       </div>
                     )}
                   </div>
@@ -294,11 +291,8 @@ const App: React.FC = () => {
 
         {isSearching && (
           <div className="h-96 flex flex-col items-center justify-center space-y-6">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-indigo-500/10 border-t-indigo-600 rounded-full animate-spin"></div>
-              <i className="fa-solid fa-dna absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600"></i>
-            </div>
-            <p className="text-[12px] font-black text-slate-900 uppercase tracking-widest animate-pulse">Initializing Scientific Workspace...</p>
+            <div className="w-16 h-16 border-4 border-indigo-500/10 border-t-indigo-600 rounded-full animate-spin"></div>
+            <p className="text-[12px] font-black text-slate-900 uppercase tracking-widest animate-pulse">Resolving Target System...</p>
           </div>
         )}
 
@@ -306,10 +300,10 @@ const App: React.FC = () => {
           <div className="fixed bottom-10 right-10 bg-rose-600 text-white px-8 py-5 rounded-[1.5rem] shadow-2xl flex items-center gap-4 z-50 animate-in fade-in slide-in-from-right-4 border-2 border-rose-500 max-w-md">
              <i className="fa-solid fa-circle-exclamation text-2xl"></i>
              <div className="flex flex-col">
-               <span className="text-[10px] font-black uppercase tracking-wider opacity-80">System Alert</span>
+               <span className="text-[10px] font-black uppercase tracking-wider opacity-80">Terminal Alert</span>
                <div className="text-[11px] font-bold uppercase break-words">{error}</div>
              </div>
-             <button onClick={() => setError(null)} className="ml-4 hover:scale-110 transition-transform shrink-0"><i className="fa-solid fa-xmark text-lg"></i></button>
+             <button onClick={() => setError(null)} className="ml-4 shrink-0"><i className="fa-solid fa-xmark"></i></button>
           </div>
         )}
       </main>

@@ -36,7 +36,7 @@ const extractText = (response: any, fallbackError: string): string => {
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY missing from context.");
+  if (!apiKey) throw new Error("The API key is missing. Please ensure it is correctly configured in your environment.");
   
   const ai = new GoogleGenAI({ apiKey });
   
@@ -86,14 +86,14 @@ export const predictMutation = async (
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY missing from context.");
+  if (!apiKey) throw new Error("API key missing.");
   const ai = new GoogleGenAI({ apiKey });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}.`,
+      contents: `Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}. Provide ΔΔG and stability impact.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -140,7 +140,7 @@ export const predictMutation = async (
         structureSourceDetails: "RCSB/AF",
         viewerVersion: "3Dmol.js"
       },
-      disclaimer: "Computational estimate only."
+      disclaimer: "Computational estimate only. Laboratory validation mandatory."
     };
   });
 };
@@ -151,7 +151,7 @@ export const generateDecisionMemo = async (
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY missing from context.");
+  if (!apiKey) throw new Error("API key missing.");
   const ai = new GoogleGenAI({ apiKey });
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({

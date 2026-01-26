@@ -1,26 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Always use Gemini 3 series for complex scientific reasoning
+// Standard model definitions for protein analysis tasks
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
-/**
- * Initialize the Google GenAI client.
- * The API key is obtained exclusively from the environment variable process.env.API_KEY.
- */
-const getAI = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-};
-
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const ai = getAI();
+  // Always initialize with the key from the environment injected by Vite
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_FAST,
-      contents: `You are a structural biology expert. Identify the protein for query: "${query}". 
-      Provide UniProt ID, PDB ID if common, amino acid sequence, and 5-8 mutation candidates for biological significance (e.g., hotspots or stabilization targets).`,
+      contents: `Identify the protein for query: "${query}". Provide UniProt ID, PDB ID if common, amino acid sequence, and 5-8 mutation candidates for biological significance.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -55,7 +47,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     });
 
     const text = response.text;
-    if (!text) throw new Error("Empty response from protein search engine.");
+    if (!text) throw new Error("Empty response from protein search.");
 
     const parsed = JSON.parse(text.trim());
     return {
@@ -65,7 +57,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     } as ProteinMetadata;
   } catch (err: any) {
     console.error("Gemini Search Error:", err);
-    throw new Error(err.message || "Failed to resolve protein system.");
+    throw new Error(err.message || "Protein resolution failed. Check your API_KEY setting in the environment.");
   }
 };
 
@@ -75,7 +67,7 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const ai = getAI();
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
@@ -84,18 +76,11 @@ export const predictMutation = async (
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_FAST,
-      contents: `Analyze the thermodynamic and structural impact of the mutation: ${mutationStr} in ${protein.name}.
+      contents: `Predict the thermodynamic and structural effects of mutation ${mutationStr} for protein ${protein.name}.
+      PRIMARY GOAL: ${goal}
+      PRIOR ASSAYS: ${memoryStr}
       
-      SCIENTIFIC CONTEXT:
-      - Goal: ${goal}
-      - Sequence Length: ${protein.length}
-      - Known Prior Data: ${memoryStr}
-      
-      TASKS:
-      1. Calculate predicted Delta Delta G (kcal/mol).
-      2. Assess stability impact (Stabilizing, Neutral, Destabilizing).
-      3. Perform structural analysis (steric clashes, H-bond networks, surface exposure).
-      4. Evaluate clinical or functional relevance.`,
+      Calculate predicted Delta Delta G (kcal/mol), assess stability impact, and provide structural rationale.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -121,17 +106,13 @@ export const predictMutation = async (
             tradeOffAnalysis: { type: Type.STRING },
             justification: { type: Type.STRING }
           },
-          required: [
-            "protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", 
-            "confidence", "relativeRank", "goalAlignment", "tradeOffAnalysis", 
-            "justification", "riskBreakdown", "structuralAnalysis", "reportSummary"
-          ]
+          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "relativeRank", "goalAlignment", "tradeOffAnalysis", "justification", "riskBreakdown"]
         }
       }
     });
 
     const text = response.text;
-    if (!text) throw new Error("Empty response from mutation engine.");
+    if (!text) throw new Error("Empty response from mutation prediction.");
 
     const baseResult = JSON.parse(text.trim());
     const runId = `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
@@ -142,19 +123,19 @@ export const predictMutation = async (
       reproducibility: {
         runId,
         timestamp: new Date().toISOString(),
-        modelName: "Gemini-3-Flash-Sci-Predict",
-        modelVersion: "0.2.5v-stable",
+        modelName: "novasciences-Delta-Engine",
+        modelVersion: "0.2.5v",
         inputHash: `SHA256:${Math.random().toString(16).substring(2, 12)}`,
         dockerImageHash: "ns-predict:v0.2.5v-thermo-engine",
         structureSource: protein.structureStatus === 'available' ? protein.sourceType : 'Sequence-Heuristic',
-        structureSourceDetails: protein.structureStatus === 'available' ? `Resolved Structure` : "Heuristic Modeling",
+        structureSourceDetails: protein.structureStatus === 'available' ? `Resolved Structure` : "Heuristic Only",
         viewerVersion: "3Dmol.js v2.0.4"
       },
-      disclaimer: "This is a computational estimate. All results must be cross-verified in a wet lab environment."
+      disclaimer: "Computational estimate. Results must be cross-verified with laboratory assay data."
     };
   } catch (err: any) {
     console.error("Gemini Prediction Error:", err);
-    throw new Error(err.message || "Mutation analysis sequence failed.");
+    throw new Error(err.message || "Mutation analysis failed. Verify API_KEY status.");
   }
 };
 
@@ -163,7 +144,7 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const ai = getAI();
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
     : "No prior experimental data provided.";
@@ -171,13 +152,9 @@ export const generateDecisionMemo = async (
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_PRO,
-      contents: `Produce an executive Decision Memo for optimizing ${protein.name}.
-      
-      STRATEGIC GOAL: ${goal}
-      PRIOR LAB RESULTS: ${memoryStr}
-      PROTEIN DESCRIPTION: ${protein.description}
-      
-      Provide a prioritized list of mutations to test, and a list of mutations to avoid based on conservation and structural risk.`,
+      contents: `Produce a high-level Decision Memo for ${protein.name} optimization.
+      GOAL: ${goal}
+      CONTEXT: ${memoryStr}`,
       config: {
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 4000 },
@@ -225,6 +202,6 @@ export const generateDecisionMemo = async (
     return JSON.parse(text.trim());
   } catch (err: any) {
     console.error("Gemini Memo Error:", err);
-    throw new Error(err.message || "Failed to generate strategic memo.");
+    throw new Error(err.message || "Failed to generate decision memo.");
   }
 };

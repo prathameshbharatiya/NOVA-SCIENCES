@@ -22,7 +22,11 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const formatError = (err: any) => {
-    if (err.message?.includes("503") || err.message?.includes("overloaded")) {
+    const msg = err.message?.toLowerCase() || "";
+    if (msg.includes("429") || msg.includes("quota") || msg.includes("resource_exhausted")) {
+      return "Quota Exceeded: Your current API key has no remaining requests or lacks access to the preview models. Please check your billing at ai.google.dev or try again in a few minutes.";
+    }
+    if (msg.includes("503") || msg.includes("overloaded")) {
       return "Gemini AI is currently under high load. We've tried retrying, but the server is still busy. Please wait a moment and try again.";
     }
     return err.message || "An unexpected system error occurred.";

@@ -1,11 +1,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
+// Downgrading both engines to Flash to avoid the "0 quota" issue often found on Pro preview models in new projects.
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
-const MODEL_NAME_PRO = "gemini-3-pro-preview";
+const MODEL_NAME_PRO = "gemini-3-flash-preview"; 
 
 /**
- * Utility for exponential backoff retries on transient errors like 503 (Overloaded)
+ * Utility for exponential backoff retries on transient errors
  */
 async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 1000): Promise<T> {
   let lastError: any;
@@ -14,10 +15,18 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDel
       return await fn();
     } catch (err: any) {
       lastError = err;
-      const isOverloaded = err.message?.includes("503") || err.message?.includes("overloaded") || err.status === 503;
-      if (isOverloaded && i < maxRetries - 1) {
+      // Handle 503 (Overloaded) and 429 (Rate Limit)
+      const isTransient = 
+        err.message?.includes("503") || 
+        err.message?.includes("429") || 
+        err.status === 503 || 
+        err.status === 429 ||
+        err.message?.toLowerCase().includes("overloaded") ||
+        err.message?.toLowerCase().includes("quota");
+
+      if (isTransient && i < maxRetries - 1) {
         const delay = initialDelay * Math.pow(2, i);
-        console.warn(`Gemini Model Overloaded. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        console.warn(`Gemini transient error detected. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -31,7 +40,6 @@ const extractText = (response: any, fallbackError: string): string => {
   if (response.candidates && response.candidates[0]?.finishReason === 'SAFETY') {
     throw new Error("Analysis blocked by safety filters. Please try a different query.");
   }
-  // Correct usage: .text property, not .text() method
   const text = response.text;
   if (!text || text.trim().length === 0) {
     throw new Error(fallbackError);

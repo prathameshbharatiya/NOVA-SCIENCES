@@ -1,7 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Force gemini-3-flash-preview for maximum availability and reliability
 const MODEL_NAME = "gemini-3-flash-preview";
 
 async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2000): Promise<T> {
@@ -36,7 +35,10 @@ const extractText = (response: any, fallbackError: string): string => {
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY missing from context.");
+  
+  const ai = new GoogleGenAI({ apiKey });
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
@@ -83,7 +85,9 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY missing from context.");
+  const ai = new GoogleGenAI({ apiKey });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
   return callWithRetry(async () => {
@@ -146,7 +150,9 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API_KEY missing from context.");
+  const ai = new GoogleGenAI({ apiKey });
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,

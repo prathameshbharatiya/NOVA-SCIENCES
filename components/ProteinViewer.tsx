@@ -39,6 +39,33 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     }
   }));
 
+  const fetchStructure = async (uId: string, pId?: string) => {
+    const cleanId = uId.trim().toUpperCase();
+    const cleanPdb = pId?.trim().toUpperCase();
+
+    // 1. Try PDB if available
+    if (cleanPdb) {
+      try {
+        const response = await fetch(`https://files.rcsb.org/download/${cleanPdb}.pdb`);
+        if (response.ok) return await response.text();
+      } catch (e) { console.warn('PDB Fetch failed:', e); }
+    }
+
+    // 2. Try AlphaFold DB V4 direct link
+    try {
+      const response = await fetch(`https://alphafold.ebi.ac.uk/files/AF-${cleanId}-F1-model_v4.pdb`);
+      if (response.ok) return await response.text();
+    } catch (e) { console.warn('AlphaFold V4 Fetch failed:', e); }
+
+    // 3. Try AlphaFold DB V1 (fallback)
+    try {
+      const response = await fetch(`https://alphafold.ebi.ac.uk/files/AF-${cleanId}-F1-model_v1.pdb`);
+      if (response.ok) return await response.text();
+    } catch (e) { console.warn('AlphaFold V1 Fetch failed:', e); }
+
+    throw new Error('All structure fetch attempts failed.');
+  };
+
   useEffect(() => {
     if (!viewerRef.current || !window.$3Dmol) return;
     
@@ -54,46 +81,23 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     setLoading(true);
     setStatus('fetching');
 
-    const cleanId = uniprotId?.trim().toUpperCase();
-    const cleanPdb = pdbId?.trim().toUpperCase();
-
-    const onFinish = () => {
-      viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
-      viewer.zoomTo();
-      viewer.render();
-      setLoading(false);
-      setStatus('available');
-    };
-
-    const onError = (e: any) => {
-      console.warn('Structure fetch failed for:', cleanId, cleanPdb, e);
-      // Final attempt: check if it's the reference p53, try to force a known good PDB
-      if (cleanId === 'P04637' || cleanPdb === '1TUP') {
-        window.$3Dmol.download('pdb:1TUP', viewer, { onfinish: onFinish, onerror: () => {
-          setLoading(false);
-          setStatus('unavailable');
-        }});
-      } else {
+    const loadData = async () => {
+      try {
+        const data = await fetchStructure(uniprotId, pdbId);
+        viewer.addModel(data, "pdb");
+        viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
+        viewer.zoomTo();
+        viewer.render();
+        setLoading(false);
+        setStatus('available');
+      } catch (err) {
+        console.error('Final Structure Loading Error:', err);
         setLoading(false);
         setStatus('unavailable');
       }
     };
 
-    // Use $3Dmol's native protocol identifiers for robust remote fetching
-    if (cleanPdb) {
-      window.$3Dmol.download(`pdb:${cleanPdb}`, viewer, { onfinish: onFinish, onerror: onError });
-    } else if (cleanId) {
-      window.$3Dmol.download(`afdb:${cleanId}`, viewer, { 
-        onfinish: onFinish, 
-        onerror: () => {
-          // If AFDB fails, try fetching from PDB with the ID as a last ditch if applicable
-          window.$3Dmol.download(`pdb:${cleanId}`, viewer, { onfinish: onFinish, onerror: onError });
-        } 
-      });
-    } else {
-      setLoading(false);
-      setStatus('unavailable');
-    }
+    loadData();
   }, [uniprotId, pdbId]);
 
   useEffect(() => {
@@ -121,14 +125,14 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
       {loading && (
         <div className="absolute inset-0 bg-slate-900/60 flex flex-col items-center justify-center z-10 backdrop-blur-sm">
           <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-[10px] text-white font-black uppercase tracking-widest animate-pulse">Establishing Structural Link...</p>
+          <p className="text-[10px] text-white font-black uppercase tracking-widest animate-pulse">Resolving Atomic Coordinates...</p>
         </div>
       )}
       {status === 'unavailable' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-500 p-10 text-center">
            <i className="fa-solid fa-eye-slash text-4xl mb-4 text-rose-500"></i>
            <p className="text-[12px] font-black uppercase tracking-widest text-white mb-2">Structure Not Found</p>
-           <p className="text-[10px] font-medium max-w-xs opacity-60">The structural resolution engine could not locate a compatible model for identifier: {uniprotId || pdbId}.</p>
+           <p className="text-[10px] font-medium max-w-xs opacity-60">The structural resolution engine could not locate a compatible model for identifier: {uniprotId || pdbId}. This protein may be partially disordered or lacks a high-resolution entry.</p>
         </div>
       )}
     </div>

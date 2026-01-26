@@ -39,10 +39,66 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     }
   }));
 
+  const fetchWithTimeout = async (url: string, timeout = 5000) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(id);
+      return response;
+    } catch (e) {
+      clearTimeout(id);
+      throw e;
+    }
+  };
+
+  const attemptFetch = async (uId: string, pId?: string): Promise<string> => {
+    const cleanId = uId.trim().toUpperCase();
+    const cleanPdb = pId?.trim().toUpperCase();
+
+    // 1. Try PDB Direct if PDB ID is provided
+    if (cleanPdb) {
+      try {
+        const res = await fetchWithTimeout(`https://files.rcsb.org/download/${cleanPdb}.pdb`);
+        if (res.ok) return await res.text();
+      } catch (e) { console.warn('PDB Fetch Failed:', e); }
+    }
+
+    // 2. Try AlphaFold Direct Model URL (v4 is most current)
+    try {
+      const res = await fetchWithTimeout(`https://alphafold.ebi.ac.uk/files/AF-${cleanId}-F1-model_v4.pdb`);
+      if (res.ok) return await res.text();
+    } catch (e) { console.warn('AF Direct Failed:', e); }
+
+    // 3. Try AlphaFold API Lookup
+    try {
+      const res = await fetchWithTimeout(`https://alphafold.ebi.ac.uk/api/prediction/${cleanId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data[0]?.pdbUrl) {
+          const pdbRes = await fetchWithTimeout(data[0].pdbUrl);
+          if (pdbRes.ok) return await pdbRes.text();
+        }
+      }
+    } catch (e) { console.warn('AF API Failed:', e); }
+
+    // 4. Special Fallback for common reference p53
+    if (cleanId === 'P04637') {
+      const res = await fetchWithTimeout(`https://files.rcsb.org/download/1TUP.pdb`);
+      if (res.ok) return await res.text();
+    }
+
+    throw new Error('All structure fetch attempts failed.');
+  };
+
   useEffect(() => {
     if (!viewerRef.current || !window.$3Dmol) return;
+    
     if (!glViewer.current) {
-      glViewer.current = window.$3Dmol.createViewer(viewerRef.current, { backgroundColor: '#0f172a', antialias: true });
+      glViewer.current = window.$3Dmol.createViewer(viewerRef.current, { 
+        backgroundColor: '#0f172a', 
+        antialias: true 
+      });
     }
 
     const viewer = glViewer.current;
@@ -50,41 +106,23 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     setLoading(true);
     setStatus('fetching');
 
-    const id = uniprotId?.trim();
-    const pdb = pdbId?.trim();
-
-    const onFinish = () => {
-      setLoading(false);
-      setStatus('available');
-      viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
-      viewer.zoomTo();
-      viewer.render();
+    const loadData = async () => {
+      try {
+        const pdbData = await attemptFetch(uniprotId, pdbId);
+        viewer.addModel(pdbData, "pdb");
+        viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
+        viewer.zoomTo();
+        viewer.render();
+        setLoading(false);
+        setStatus('available');
+      } catch (err) {
+        console.error('Structure loading error:', err);
+        setLoading(false);
+        setStatus('unavailable');
+      }
     };
 
-    const onError = () => {
-      setLoading(false);
-      setStatus('unavailable');
-    };
-
-    // Use $3Dmol's native downloaders for better CORS handling
-    if (pdb) {
-      window.$3Dmol.download(`pdb:${pdb}`, viewer, { onfinish: onFinish, onerror: onError });
-    } else if (id) {
-      // Try AlphaFold DB via native downloader
-      window.$3Dmol.download(`afdb:${id}`, viewer, { 
-        onfinish: onFinish, 
-        onerror: () => {
-          // Fallback for common reference p53 if AFDB lookup fails
-          if (id === 'P04637') {
-            window.$3Dmol.download(`pdb:1TUP`, viewer, { onfinish: onFinish, onerror: onError });
-          } else {
-            onError();
-          }
-        } 
-      });
-    } else {
-      onError();
-    }
+    loadData();
   }, [uniprotId, pdbId]);
 
   useEffect(() => {
@@ -98,7 +136,7 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
         fontSize: 12, 
         fontColor: 'white',
         backgroundColor: 'black',
-        backgroundOpacity: 0.7,
+        backgroundOpacity: 0.8,
         position: sel 
       });
       viewer.zoomTo(sel, 800);
@@ -112,13 +150,14 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
       {loading && (
         <div className="absolute inset-0 bg-slate-900/60 flex flex-col items-center justify-center z-10 backdrop-blur-sm">
           <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-[10px] text-white font-black uppercase tracking-widest">Resolving Model...</p>
+          <p className="text-[10px] text-white font-black uppercase tracking-widest animate-pulse">Establishing Structural Link...</p>
         </div>
       )}
       {status === 'unavailable' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-500">
-           <i className="fa-solid fa-eye-slash text-4xl mb-4"></i>
-           <p className="text-[10px] font-black uppercase tracking-widest">Structural Reference Not Found</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-500 p-10 text-center">
+           <i className="fa-solid fa-eye-slash text-4xl mb-4 text-rose-500"></i>
+           <p className="text-[12px] font-black uppercase tracking-widest text-white mb-2">Structure Not Found</p>
+           <p className="text-[10px] font-medium max-w-xs opacity-60">The UniProt system (${uniprotId}) returned no compatible structural model from AlphaFold or PDB.</p>
         </div>
       )}
     </div>

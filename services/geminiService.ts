@@ -1,7 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Standard model definitions for protein analysis tasks
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
@@ -56,7 +55,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     } as ProteinMetadata;
   } catch (err: any) {
     console.error("Gemini Search Error:", err);
-    throw new Error(err.message || "Protein resolution failed. Check your API_KEY configuration.");
+    throw new Error(err.message || "Protein resolution failed. Verify your API_KEY dashboard settings.");
   }
 };
 
@@ -75,12 +74,16 @@ export const predictMutation = async (
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_FAST,
-      contents: `Predict the effects of mutation ${mutationStr} for protein ${protein.name}.
+      contents: `Predict the thermodynamic and structural effects of mutation ${mutationStr} for protein ${protein.name}.
+      
       PRIMARY GOAL: ${goal}
       EXPERIMENTAL MEMORY: ${memoryStr}
-      CONTEXT: ${protein.referenceContext || 'General protein engineering context'}
       
-      Predict the Delta Delta G (kcal/mol), stability impact, and provide a deep structural rationale.`,
+      CRITICAL: Calculate the Delta Delta G (kcal/mol). 
+      - Negative values indicate destabilization.
+      - Positive values indicate stabilization.
+      
+      Provide structural rationale based on steric clashes, hydrogen bonding changes, and hydrophobic core integrity.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -123,7 +126,7 @@ export const predictMutation = async (
       reproducibility: {
         runId,
         timestamp: new Date().toISOString(),
-        modelName: "novasciences-Iterative-Engine",
+        modelName: "novasciences-Delta-Engine",
         modelVersion: "0.2.5v",
         inputHash: `SHA256:${Math.random().toString(16).substring(2, 12)}`,
         dockerImageHash: "ns-predict:v0.2.5v-thermo-engine",
@@ -135,7 +138,7 @@ export const predictMutation = async (
     };
   } catch (err: any) {
     console.error("Gemini Prediction Error:", err);
-    throw new Error(err.message || "Mutation analysis failed. Check your API_KEY configuration.");
+    throw new Error(err.message || "Mutation analysis failed. Please check your network or API key.");
   }
 };
 
@@ -152,10 +155,9 @@ export const generateDecisionMemo = async (
   try {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_PRO,
-      contents: `Produce a high-level Decision Memo for ${protein.name}.
+      contents: `Produce a high-level Decision Memo for ${protein.name} optimization.
       GOAL: ${goal}
-      MEMORY: ${memoryStr}
-      CONTEXT: ${protein.referenceContext || 'Standard protein engineering principles'}`,
+      MEMORY: ${memoryStr}`,
       config: {
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 4000 },
@@ -203,6 +205,6 @@ export const generateDecisionMemo = async (
     return JSON.parse(text.trim());
   } catch (err: any) {
     console.error("Gemini Memo Error:", err);
-    throw new Error(err.message || "Failed to generate decision memo. Check your API_KEY configuration.");
+    throw new Error(err.message || "Failed to generate decision memo.");
   }
 };

@@ -36,7 +36,7 @@ const extractText = (response: any, fallbackError: string): string => {
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("The API key is missing. Please ensure it is correctly configured in your environment.");
+  if (!apiKey) throw new Error("The API key is missing. Please ensure it is correctly configured as API_KEY in your environment.");
   
   const ai = new GoogleGenAI({ apiKey });
   

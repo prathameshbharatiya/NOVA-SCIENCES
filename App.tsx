@@ -21,6 +21,13 @@ const App: React.FC = () => {
   const [decisionMemo, setDecisionMemo] = useState<DecisionMemoType | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const formatError = (err: any) => {
+    if (err.message?.includes("503") || err.message?.includes("overloaded")) {
+      return "Gemini AI is currently under high load. We've tried retrying, but the server is still busy. Please wait a moment and try again.";
+    }
+    return err.message || "An unexpected system error occurred.";
+  };
+
   const loadReference = async (ref: ReferenceProtein) => {
     setIsSearching(true);
     setError(null);
@@ -43,8 +50,7 @@ const App: React.FC = () => {
         });
       }
     } catch (err: any) {
-      console.error(err);
-      setError(`Search Error: ${err.message || 'System busy'}`);
+      setError(`Search Alert: ${formatError(err)}`);
     } finally {
       setIsSearching(false);
     }
@@ -60,8 +66,7 @@ const App: React.FC = () => {
       const data = await searchProtein(searchQuery);
       setCurrentProtein({ ...data, isValidatedReference: false });
     } catch (err: any) {
-      console.error(err);
-      setError(`Resolve Error: ${err.message || 'Could not resolve protein'}`);
+      setError(`Resolution Failed: ${formatError(err)}`);
     } finally {
       setIsSearching(false);
     }
@@ -79,8 +84,7 @@ const App: React.FC = () => {
       setResult(pred);
       setDecisionMemo(memo);
     } catch (err: any) {
-      console.error(err);
-      setError(`Decision Engine Error: ${err.message || 'Timeout'}`);
+      setError(`Engine Delay: ${formatError(err)}`);
     } finally {
       setIsPredicting(false);
     }
@@ -122,7 +126,6 @@ const App: React.FC = () => {
           .image-label { color: white; font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 12px; background: #0f172a; }
           .risk-explainer { font-size: 12px; color: #475569; background: #f8fafc; padding: 15px; border-radius: 12px; margin-top: 10px; border: 1px dashed #cbd5e1; }
           .footer { text-align: center; padding: 40px; font-size: 11px; color: #64748b; font-style: italic; }
-          .metric-pill { display: inline-block; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
         </style>
       </head>
       <body>
@@ -132,70 +135,11 @@ const App: React.FC = () => {
             <h1 style="margin:0; font-weight:800; text-transform:uppercase;">Scientific Decision Memo</h1>
             <p style="opacity:0.8; margin:5px 0 0;">${currentProtein.name} (${currentProtein.id}) | Goal: ${goal}</p>
           </div>
-          
-          <div class="section">
-            <div class="title">Executive Summary</div>
-            <div class="box">${decisionMemo.summary}</div>
-          </div>
-
-          <div class="section">
-            <div class="title">Structural Evidence Snapshots</div>
-            <div class="grid">
-              <div class="image-frame">
-                <img src="${full}" />
-                <div class="image-label">Global Fold Context</div>
-              </div>
-              <div class="image-frame">
-                <img src="${zoomed}" />
-                <div class="image-label">Mutation Site Analysis: ${result.mutation}</div>
-              </div>
-            </div>
-          </div>
-          
-          <div class="section">
-            <div class="title">Thermodynamic Analysis (&Delta;&Delta;G)</div>
-            <div class="box">
-              <div style="margin-bottom: 15px;">
-                <strong>Predicted &Delta;&Delta;G:</strong> 
-                <span class="metric-pill" style="background: #e0f2fe; color: #0369a1;">${result.deltaDeltaG.toFixed(2)} kcal/mol</span>
-                &bull; 
-                <strong>Impact:</strong> 
-                <span class="metric-pill" style="background: #f1f5f9; color: #0f172a;">${result.stabilityImpact}</span>
-              </div>
-              <p style="font-size: 13px; color: #334155; margin: 0;">${result.justification}</p>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="title">Mutation Risk Profile</div>
-            <div style="background:#fff1f2; border:2px solid #be123c; padding:25px; border-radius:24px; color:#9f1239;">
-              <div style="font-size: 14px; font-weight: 800; margin-bottom: 10px; text-transform: uppercase;">Structural/Functional Risk Assessment</div>
-              <div style="font-weight: 600; line-height: 1.5;">${result.riskBreakdown}</div>
-            </div>
-            
-            <div class="risk-explainer">
-              <strong>Understanding Mutation Risk:</strong><br>
-              In protein engineering, mutation risk measures the likelihood of unintended deleterious effects on the protein's native state. 
-              <strong>High Risk</strong> typically indicates that the mutation occurs in a highly conserved core, near a critical catalytic site, 
-              or introduces significant steric clashes that could lead to misfolding, aggregation, or complete loss of function, 
-              regardless of its local thermodynamic stability profile.
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="title">Reproduction Metadata</div>
-            <div style="font-size: 11px; color: #64748b; font-family: monospace;">
-              Run ID: ${result.reproducibility.runId}<br>
-              Model: ${result.reproducibility.modelName} (v${result.reproducibility.modelVersion})<br>
-              Timestamp: ${result.reproducibility.timestamp}<br>
-              Source: ${result.reproducibility.structureSource} (${result.reproducibility.structureSourceDetails})
-            </div>
-          </div>
-
-          <div class="footer">
-            CONFIDENTIAL PI MEMO &bull; GENERATED BY novasciences 0.2.5v ENGINE<br>
-            ${result.disclaimer}
-          </div>
+          <div class="section"><div class="title">Executive Summary</div><div class="box">${decisionMemo.summary}</div></div>
+          <div class="section"><div class="title">Evidence Snapshots</div><div class="grid"><div class="image-frame"><img src="${full}" /><div class="image-label">Global Context</div></div><div class="image-frame"><img src="${zoomed}" /><div class="image-label">Site: ${result.mutation}</div></div></div></div>
+          <div class="section"><div class="title">Thermodynamics</div><div class="box"><strong>&Delta;&Delta;G:</strong> ${result.deltaDeltaG.toFixed(2)} kcal/mol &bull; ${result.stabilityImpact}<p style="font-size: 13px; color: #334155; margin-top: 10px;">${result.justification}</p></div></div>
+          <div class="section"><div class="title">Risk Profile</div><div style="background:#fff1f2; border:2px solid #be123c; padding:25px; border-radius:24px; color:#9f1239; font-weight:600;">${result.riskBreakdown}</div></div>
+          <div class="footer">CONFIDENTIAL PI MEMO &bull; ${result.disclaimer}</div>
         </div>
       </body>
       </html>

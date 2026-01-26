@@ -1,17 +1,37 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Always use Gemini 3 series for complex scientific reasoning
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
 /**
- * Validates that the response contains valid text and handles safety blocks.
+ * Utility for exponential backoff retries on transient errors like 503 (Overloaded)
  */
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 1000): Promise<T> {
+  let lastError: any;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastError = err;
+      const isOverloaded = err.message?.includes("503") || err.message?.includes("overloaded") || err.status === 503;
+      if (isOverloaded && i < maxRetries - 1) {
+        const delay = initialDelay * Math.pow(2, i);
+        console.warn(`Gemini Model Overloaded. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 const extractText = (response: any, fallbackError: string): string => {
   if (response.candidates && response.candidates[0]?.finishReason === 'SAFETY') {
     throw new Error("Analysis blocked by safety filters. Please try a different query.");
   }
+  // Correct usage: .text property, not .text() method
   const text = response.text;
   if (!text || text.trim().length === 0) {
     throw new Error(fallbackError);
@@ -20,63 +40,63 @@ const extractText = (response: any, fallbackError: string): string => {
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  // Initialize inside function to catch injected process.env.API_KEY correctly
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  try {
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME_FAST,
-      contents: `You are a biological data specialist. Identify the protein for the query: "${query}". 
-      Return details including UniProt ID, common PDB ID, and 6 suggested mutations that are relevant for stability or functional studies.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            pdbId: { type: Type.STRING },
-            name: { type: Type.STRING },
-            geneName: { type: Type.STRING },
-            organism: { type: Type.STRING },
-            description: { type: Type.STRING },
-            length: { type: Type.NUMBER },
-            sequence: { type: Type.STRING },
-            pLDDTAvg: { type: Type.NUMBER },
-            suggestedMutations: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  residue: { type: Type.STRING },
-                  position: { type: Type.NUMBER },
-                  rationale: { type: Type.STRING },
-                  confidence: { type: Type.STRING, enum: ["High", "Medium", "Low"] }
-                },
-                required: ["residue", "position", "rationale", "confidence"]
+  return callWithRetry(async () => {
+    try {
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME_FAST,
+        contents: `You are a biological data specialist. Identify the protein for the query: "${query}". 
+        Return details including UniProt ID, common PDB ID, and 6 suggested mutations that are relevant for stability or functional studies.`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              pdbId: { type: Type.STRING },
+              name: { type: Type.STRING },
+              geneName: { type: Type.STRING },
+              organism: { type: Type.STRING },
+              description: { type: Type.STRING },
+              length: { type: Type.NUMBER },
+              sequence: { type: Type.STRING },
+              pLDDTAvg: { type: Type.NUMBER },
+              suggestedMutations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    residue: { type: Type.STRING },
+                    position: { type: Type.NUMBER },
+                    rationale: { type: Type.STRING },
+                    confidence: { type: Type.STRING, enum: ["High", "Medium", "Low"] }
+                  },
+                  required: ["residue", "position", "rationale", "confidence"]
+                }
               }
-            }
-          },
-          required: ["id", "name", "description", "length", "suggestedMutations"]
+            },
+            required: ["id", "name", "description", "length", "suggestedMutations"]
+          }
         }
-      }
-    });
+      });
 
-    const text = extractText(response, "The AI returned an empty response during protein search. Please try a more specific protein name or UniProt ID.");
-    const parsed = JSON.parse(text.trim());
-    
-    return {
-      ...parsed,
-      sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold',
-      structureStatus: 'idle'
-    } as ProteinMetadata;
-  } catch (err: any) {
-    console.error("Gemini Search Error:", err);
-    // Specifically catch API Key issues which often present as 401/403 or network errors
-    if (err.message?.includes('API_KEY')) {
-      throw new Error("Invalid or missing Gemini API Key. Please verify your project settings.");
+      const text = extractText(response, "The AI returned an empty response during protein search.");
+      const parsed = JSON.parse(text.trim());
+      
+      return {
+        ...parsed,
+        sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold',
+        structureStatus: 'idle'
+      } as ProteinMetadata;
+    } catch (err: any) {
+      console.error("Gemini Search Error:", err);
+      if (err.message?.includes('API_KEY')) {
+        throw new Error("Invalid or missing Gemini API Key. Please verify your project settings.");
+      }
+      throw err;
     }
-    throw new Error(err.message || "Protein resolution failed. Ensure you are using a valid Google Gemini API key (not OpenAI).");
-  }
+  });
 };
 
 export const predictMutation = async (
@@ -91,15 +111,13 @@ export const predictMutation = async (
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
     : "No prior experimental data.";
 
-  try {
+  return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_FAST,
       contents: `Perform a detailed thermodynamic analysis of the ${mutationStr} mutation in the ${protein.name} protein system.
-      
       GOAL: ${goal}
       PRIOR DATA: ${memoryStr}
-      
-      You must calculate the predicted Delta Delta G (kcal/mol) and provide a deep structural rationale.`,
+      Calculate predicted Delta Delta G (kcal/mol) and provide structural rationale.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -134,7 +152,7 @@ export const predictMutation = async (
       }
     });
 
-    const text = extractText(response, "Thermodynamic engine returned no data. The mutation might be in a region the model cannot reliably analyze.");
+    const text = extractText(response, "Thermodynamic engine returned no data.");
     const baseResult = JSON.parse(text.trim());
     const runId = `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
     
@@ -154,10 +172,7 @@ export const predictMutation = async (
       },
       disclaimer: "Computational estimate. Results must be cross-verified with laboratory assay data."
     };
-  } catch (err: any) {
-    console.error("Gemini Prediction Error:", err);
-    throw new Error(err.message || "Mutation analysis failed. Please verify your connection and API key.");
-  }
+  });
 };
 
 export const generateDecisionMemo = async (
@@ -170,14 +185,12 @@ export const generateDecisionMemo = async (
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
     : "None provided.";
 
-  try {
+  return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME_PRO,
       contents: `Generate a high-level scientific Decision Memo for the protein ${protein.name} optimization project.
       GOAL: ${goal}
-      PRIOR RESULTS: ${memoryStr}
-      
-      Recommend specific next steps and mutations based on current structural and functional knowledge.`,
+      PRIOR RESULTS: ${memoryStr}`,
       config: {
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 4000 },
@@ -220,10 +233,7 @@ export const generateDecisionMemo = async (
       }
     });
 
-    const text = extractText(response, "Decision engine could not synthesize a memo. Check your scientific parameters.");
+    const text = extractText(response, "Decision engine could not synthesize a memo.");
     return JSON.parse(text.trim());
-  } catch (err: any) {
-    console.error("Gemini Memo Error:", err);
-    throw new Error(err.message || "Strategic memo generation failed.");
-  }
+  });
 };

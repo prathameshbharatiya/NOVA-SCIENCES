@@ -1,24 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Using the specified models for the task type
+// Standard model definitions
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
-/**
- * Validates and returns the API key from the environment.
- * The environment variable process.env.API_KEY is injected by the build system.
- */
-const getApiKey = (): string => {
-  const key = process.env.API_KEY;
-  if (!key || key === "undefined" || key === "") {
-    throw new Error("API_KEY is missing. Ensure the environment variable is set and the application is re-deployed.");
+// Helper to initialize AI client with the injected environment key
+const initAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
+    throw new Error("Missing API Key. The system has not yet injected the environment variable.");
   }
-  return key;
+  return new GoogleGenAI({ apiKey });
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const ai = initAI();
   
   try {
     const response = await ai.models.generateContent({
@@ -78,7 +75,7 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const ai = initAI();
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
@@ -156,7 +153,7 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const ai = new GoogleGenAI({ apiKey: getApiKey() });
+  const ai = initAI();
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
     : "No prior experimental data provided.";

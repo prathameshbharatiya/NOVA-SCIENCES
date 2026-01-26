@@ -1,21 +1,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
 
-// Standard model definitions
+// Standard model definitions for protein analysis tasks
 const MODEL_NAME_FAST = "gemini-3-flash-preview";
 const MODEL_NAME_PRO = "gemini-3-pro-preview";
 
-// Helper to initialize AI client with the injected environment key
-const initAI = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    throw new Error("Missing API Key. The system has not yet injected the environment variable.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
-
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const ai = initAI();
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
     const response = await ai.models.generateContent({
@@ -65,7 +56,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     } as ProteinMetadata;
   } catch (err: any) {
     console.error("Gemini Search Error:", err);
-    throw new Error(err.message || "Protein resolution failed.");
+    throw new Error(err.message || "Protein resolution failed. Check your API_KEY configuration.");
   }
 };
 
@@ -75,7 +66,7 @@ export const predictMutation = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<PredictionResult> => {
-  const ai = initAI();
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
@@ -144,7 +135,7 @@ export const predictMutation = async (
     };
   } catch (err: any) {
     console.error("Gemini Prediction Error:", err);
-    throw new Error(err.message || "Mutation analysis failed.");
+    throw new Error(err.message || "Mutation analysis failed. Check your API_KEY configuration.");
   }
 };
 
@@ -153,7 +144,7 @@ export const generateDecisionMemo = async (
   goal: ScientificGoal, 
   priorResults: PriorResult[]
 ): Promise<DecisionMemo> => {
-  const ai = initAI();
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const memoryStr = priorResults.length > 0 
     ? priorResults.map(r => `${r.mutation}: ${r.outcome}`).join(", ") 
     : "No prior experimental data provided.";
@@ -212,6 +203,6 @@ export const generateDecisionMemo = async (
     return JSON.parse(text.trim());
   } catch (err: any) {
     console.error("Gemini Memo Error:", err);
-    throw new Error(err.message || "Failed to generate decision memo.");
+    throw new Error(err.message || "Failed to generate decision memo. Check your API_KEY configuration.");
   }
 };

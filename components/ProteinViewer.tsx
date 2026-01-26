@@ -39,58 +39,6 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     }
   }));
 
-  const fetchWithTimeout = async (url: string, timeout = 5000) => {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    try {
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(id);
-      return response;
-    } catch (e) {
-      clearTimeout(id);
-      throw e;
-    }
-  };
-
-  const attemptFetch = async (uId: string, pId?: string): Promise<string> => {
-    const cleanId = uId.trim().toUpperCase();
-    const cleanPdb = pId?.trim().toUpperCase();
-
-    // 1. Try PDB Direct if PDB ID is provided
-    if (cleanPdb) {
-      try {
-        const res = await fetchWithTimeout(`https://files.rcsb.org/download/${cleanPdb}.pdb`);
-        if (res.ok) return await res.text();
-      } catch (e) { console.warn('PDB Fetch Failed:', e); }
-    }
-
-    // 2. Try AlphaFold Direct Model URL (v4 is most current)
-    try {
-      const res = await fetchWithTimeout(`https://alphafold.ebi.ac.uk/files/AF-${cleanId}-F1-model_v4.pdb`);
-      if (res.ok) return await res.text();
-    } catch (e) { console.warn('AF Direct Failed:', e); }
-
-    // 3. Try AlphaFold API Lookup
-    try {
-      const res = await fetchWithTimeout(`https://alphafold.ebi.ac.uk/api/prediction/${cleanId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data[0]?.pdbUrl) {
-          const pdbRes = await fetchWithTimeout(data[0].pdbUrl);
-          if (pdbRes.ok) return await pdbRes.text();
-        }
-      }
-    } catch (e) { console.warn('AF API Failed:', e); }
-
-    // 4. Special Fallback for common reference p53
-    if (cleanId === 'P04637') {
-      const res = await fetchWithTimeout(`https://files.rcsb.org/download/1TUP.pdb`);
-      if (res.ok) return await res.text();
-    }
-
-    throw new Error('All structure fetch attempts failed.');
-  };
-
   useEffect(() => {
     if (!viewerRef.current || !window.$3Dmol) return;
     
@@ -106,23 +54,40 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     setLoading(true);
     setStatus('fetching');
 
-    const loadData = async () => {
-      try {
-        const pdbData = await attemptFetch(uniprotId, pdbId);
-        viewer.addModel(pdbData, "pdb");
-        viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
-        viewer.zoomTo();
-        viewer.render();
-        setLoading(false);
-        setStatus('available');
-      } catch (err) {
-        console.error('Structure loading error:', err);
+    const cleanId = uniprotId?.trim().toUpperCase();
+    const cleanPdb = pdbId?.trim().toUpperCase();
+
+    const onFinish = () => {
+      viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
+      viewer.zoomTo();
+      viewer.render();
+      setLoading(false);
+      setStatus('available');
+    };
+
+    const onError = (e: any) => {
+      console.warn('Structural resolve failed for:', cleanId, cleanPdb, e);
+      // Fallback for demo purposes if everything fails
+      if (cleanId === 'P04637') {
+        window.$3Dmol.download('pdb:1TUP', viewer, { onfinish: onFinish, onerror: () => {
+          setLoading(false);
+          setStatus('unavailable');
+        }});
+      } else {
         setLoading(false);
         setStatus('unavailable');
       }
     };
 
-    loadData();
+    // Use $3Dmol native downloaders as they handle CORS and proxying automatically
+    if (cleanPdb) {
+      window.$3Dmol.download(`pdb:${cleanPdb}`, viewer, { onfinish: onFinish, onerror: onError });
+    } else if (cleanId) {
+      window.$3Dmol.download(`afdb:${cleanId}`, viewer, { onfinish: onFinish, onerror: onError });
+    } else {
+      setLoading(false);
+      setStatus('unavailable');
+    }
   }, [uniprotId, pdbId]);
 
   useEffect(() => {
@@ -157,7 +122,7 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 text-slate-500 p-10 text-center">
            <i className="fa-solid fa-eye-slash text-4xl mb-4 text-rose-500"></i>
            <p className="text-[12px] font-black uppercase tracking-widest text-white mb-2">Structure Not Found</p>
-           <p className="text-[10px] font-medium max-w-xs opacity-60">The UniProt system (${uniprotId}) returned no compatible structural model from AlphaFold or PDB.</p>
+           <p className="text-[10px] font-medium max-w-xs opacity-60">The resolution system returned no compatible model for identifier: {uniprotId || pdbId}.</p>
         </div>
       )}
     </div>

@@ -197,6 +197,19 @@ const App: React.FC = () => {
     const snapshots = viewerHandleRef.current?.getSnapshots();
     const { full, zoomed } = snapshots || { full: '', zoomed: '' };
     
+    // Generate Decision Log HTML segment
+    const logsHtml = logEntries.map(entry => `
+      <div style="border: 1px solid #e2e8f0; border-radius: 16px; margin-bottom: 20px; padding: 20px; background: #fff;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h4 style="margin: 0; font-size: 14px; font-weight: 800; color: #1e293b;">${entry.mutationTested} - ${entry.outcome}</h4>
+          <span style="font-size: 10px; color: #94a3b8;">${new Date(entry.timestamp).toLocaleString()}</span>
+        </div>
+        <p style="font-size: 12px; margin: 0 0 10px; color: #475569;"><strong>Objective:</strong> ${entry.goal}</p>
+        <p style="font-size: 12px; margin: 0 0 10px; color: #475569;"><strong>Notes:</strong> ${entry.userNotes || 'No notes provided.'}</p>
+        ${entry.snapshots?.zoomed ? `<img src="${entry.snapshots.zoomed}" style="width: 150px; border-radius: 8px; border: 1px solid #f1f5f9;" />` : ''}
+      </div>
+    `).join('');
+
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="en">
@@ -213,6 +226,7 @@ const App: React.FC = () => {
           .box { background: #f8fafc; padding: 30px; border-radius: 20px; font-size: 14px; border: 1px solid #e2e8f0; line-height: 1.6; }
           .grid { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; }
           .snapshot { width: 100%; border-radius: 20px; border: 4px solid #f1f5f9; }
+          .log-section { background: #f1f5f9; border-radius: 24px; padding: 30px; }
         </style>
       </head>
       <body>
@@ -242,6 +256,12 @@ const App: React.FC = () => {
             <div class="grid">
               <div><p style="font-size: 10px; font-weight: 900; margin-bottom: 8px;">GLOBAL CONTEXT</p><img src="${full}" class="snapshot" /></div>
               <div><p style="font-size: 10px; font-weight: 900; margin-bottom: 8px;">LOCAL MUTATION SITE</p><img src="${zoomed}" class="snapshot" /></div>
+            </div>
+          </div>
+          <div class="section">
+            <div class="title">4. Laboratory Notebook (Decision Log)</div>
+            <div class="log-section">
+              ${logsHtml || '<p style="font-size: 12px; color: #64748b; font-weight: 600; text-align: center;">No previous session logs recorded.</p>'}
             </div>
           </div>
           <div class="section" style="background: #f8fafc; border: 0;">

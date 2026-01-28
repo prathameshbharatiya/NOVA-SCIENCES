@@ -1,9 +1,14 @@
-
 export enum ScientificGoal {
   STABILITY = 'Stability Improvement',
   BINDING = 'Binding/Interface Optimization',
   ROBUSTNESS = 'Functional Robustness',
   EXPLORATORY = 'Exploratory Scanning'
+}
+
+export enum RiskTolerance {
+  LOW = 'Low (Conservative)',
+  MEDIUM = 'Medium (Balanced)',
+  HIGH = 'High (Exploratory)'
 }
 
 export interface PriorResult {
@@ -49,7 +54,7 @@ export interface PredictionResult {
   nextActions: string[];
   structuralAnalysis: string;
   functionalImpact: string;
-  riskBreakdown: string; // New: Detailed explanation of risks
+  riskBreakdown: string;
   clinicalSignificance: string;
   references: string[];
   reproducibility: ReproducibilityMetadata;
@@ -57,7 +62,7 @@ export interface PredictionResult {
   disclaimer: string;
   goalAlignment: 'High' | 'Medium' | 'Low';
   tradeOffAnalysis: string;
-  justification: string; // The refined "Rationale"
+  justification: string;
   isValidatedReference: boolean;
   guardrails?: {
     isLargeProtein: boolean;
@@ -83,6 +88,23 @@ export interface DecisionMemo {
   summary: string;
   memoryContext: string;
   referenceContextApplied: boolean;
+}
+
+export interface DecisionLogEntry {
+  id: string;
+  timestamp: string;
+  proteinName: string;
+  uniprotId: string;
+  goal: ScientificGoal;
+  riskTolerance: RiskTolerance;
+  preserveRegions: string;
+  environment: string;
+  mutationTested: string;
+  prediction?: PredictionResult;
+  memo?: DecisionMemo;
+  snapshots?: { full: string; zoomed: string };
+  userNotes: string;
+  outcome: 'Positive' | 'Neutral' | 'Negative' | 'Not Tested Yet';
 }
 
 export type StructureStatus = 'idle' | 'fetching' | 'available' | 'unavailable' | 'error';

@@ -1,13 +1,13 @@
-
 import React from 'react';
 import { DecisionMemo as DecisionMemoType, ScientificGoal } from '../types';
 
 interface DecisionMemoProps {
   memo: DecisionMemoType;
   goal: ScientificGoal;
+  onSelectMutation?: (mutStr: string) => void;
 }
 
-const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal }) => {
+const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal, onSelectMutation }) => {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-700">
       <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden">
@@ -35,8 +35,12 @@ const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal }) => {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {memo.recommended.map((rec) => (
-                <div key={rec.rank} className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl relative">
-                  <div className="absolute top-4 right-4 text-emerald-300 font-black text-4xl opacity-50 italic">#{rec.rank}</div>
+                <div 
+                  key={rec.rank} 
+                  onClick={() => onSelectMutation?.(rec.mutation)}
+                  className="bg-emerald-50 border border-emerald-100 p-6 rounded-3xl relative cursor-pointer hover:border-emerald-400 hover:shadow-lg transition-all group"
+                >
+                  <div className="absolute top-4 right-4 text-emerald-300 font-black text-4xl opacity-50 italic group-hover:text-emerald-500 transition-colors">#{rec.rank}</div>
                   <h4 className="text-xl font-black text-emerald-900 mb-2">{rec.mutation}</h4>
                   <div className="flex gap-2 mb-4 flex-wrap">
                     <span className="bg-emerald-600 text-white text-[8px] font-black px-2 py-0.5 rounded uppercase">{rec.goalAlignment} Alignment</span>
@@ -44,6 +48,9 @@ const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal }) => {
                   </div>
                   <p className="text-[11px] text-emerald-800 leading-relaxed font-medium mb-3">{rec.rationale}</p>
                   <p className="text-[9px] text-emerald-600 font-bold uppercase italic"><i className="fa-solid fa-warning mr-1"></i> {rec.risk}</p>
+                  <div className="mt-4 opacity-0 group-hover:opacity-100 transition-opacity text-[8px] font-black text-emerald-700 uppercase flex items-center gap-1">
+                    <i className="fa-solid fa-arrow-right"></i> Set as target
+                  </div>
                 </div>
               ))}
             </div>

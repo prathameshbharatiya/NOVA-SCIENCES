@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo } from "../types";
+import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo, RiskTolerance } from "../types";
 
 const MODEL_NAME = "gemini-3-flash-preview";
 
@@ -27,7 +27,7 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDel
 
 const extractText = (response: any, fallbackError: string): string => {
   if (response.candidates && response.candidates[0]?.finishReason === 'SAFETY') {
-    throw new Error("Biological safety filter triggered. Please use standard research identifiers.");
+    throw new Error("Biological safety filter triggered. Research strictly limited to non-harmful proteins.");
   }
   const text = response.text;
   if (!text) throw new Error(fallbackError);
@@ -36,14 +36,13 @@ const extractText = (response: any, fallbackError: string): string => {
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("The API key is missing. Please ensure it is correctly configured as API_KEY in your environment.");
-  
+  if (!apiKey) throw new Error("API_KEY missing from environment.");
   const ai = new GoogleGenAI({ apiKey });
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Identify the protein for: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 relevant mutations.`,
+      contents: `You are NOVA, a decision-first protein engineering workstation. Resolve protein: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 relevant mutations.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -83,17 +82,26 @@ export const predictMutation = async (
   protein: ProteinMetadata, 
   mutation: Mutation, 
   goal: ScientificGoal, 
-  priorResults: PriorResult[]
+  priorResults: PriorResult[],
+  risk: RiskTolerance,
+  preserve: string,
+  environment: string
 ): Promise<PredictionResult> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API key missing.");
+  if (!apiKey) throw new Error("API_KEY missing.");
   const ai = new GoogleGenAI({ apiKey });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}. Provide ΔΔG and stability impact.`,
+      contents: `NOVA DECISION ENGINE: Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}. 
+      DECISION PARAMETERS: 
+      - Risk Tolerance: ${risk}
+      - Preservation Constraint: ${preserve || "None"} (NEVER suggest mutations here)
+      - Environment: ${environment || "Standard physiological conditions"}
+      
+      EXPERIMENTAL MEMORY (LOGGED OUTCOMES): ${JSON.stringify(priorResults)}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -136,8 +144,8 @@ export const predictMutation = async (
         modelVersion: "0.2.5v",
         inputHash: "NATIVE",
         dockerImageHash: "v0.2.5v-stable",
-        structureSource: "Native",
-        structureSourceDetails: "RCSB/AF",
+        structureSource: protein.sourceType,
+        structureSourceDetails: protein.pdbId ? `PDB:${protein.pdbId}` : `AFDB:${protein.id}`,
         viewerVersion: "3Dmol.js"
       },
       disclaimer: "Computational estimate only. Laboratory validation mandatory."
@@ -148,22 +156,54 @@ export const predictMutation = async (
 export const generateDecisionMemo = async (
   protein: ProteinMetadata, 
   goal: ScientificGoal, 
-  priorResults: PriorResult[]
+  priorResults: PriorResult[],
+  risk: RiskTolerance,
+  preserve: string,
+  environment: string
 ): Promise<DecisionMemo> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API key missing.");
+  if (!apiKey) throw new Error("API_KEY missing.");
   const ai = new GoogleGenAI({ apiKey });
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Synthesize a scientific memo for ${protein.name} focusing on ${goal}.`,
+      contents: `NOVA MEMO GENERATOR: Synthesize a decision-first memo for ${protein.name} (${protein.id}). 
+      FOCUS: ${goal}. 
+      CONSTRAINTS: Risk=${risk}, Preservation=${preserve}, Env=${environment}. 
+      MEMO RULE: Prioritize actionable reasoning over descriptive theory. 
+      EXPERIMENTAL MEMORY: ${JSON.stringify(priorResults)}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            recommended: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { rank: { type: Type.NUMBER }, mutation: { type: Type.STRING }, rationale: { type: Type.STRING }, goalAlignment: { type: Type.STRING }, confidence: { type: Type.STRING }, risk: { type: Type.STRING } } } },
-            discouraged: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { mutation: { type: Type.STRING }, risk: { type: Type.STRING }, signal: { type: Type.STRING } } } },
+            recommended: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: { 
+                  rank: { type: Type.NUMBER }, 
+                  mutation: { type: Type.STRING }, 
+                  rationale: { type: Type.STRING }, 
+                  goalAlignment: { type: Type.STRING }, 
+                  confidence: { type: Type.STRING }, 
+                  risk: { type: Type.STRING } 
+                },
+                required: ["rank", "mutation", "rationale", "goalAlignment", "confidence", "risk"]
+              } 
+            },
+            discouraged: { 
+              type: Type.ARRAY, 
+              items: { 
+                type: Type.OBJECT, 
+                properties: { 
+                  mutation: { type: Type.STRING }, 
+                  risk: { type: Type.STRING }, 
+                  signal: { type: Type.STRING } 
+                },
+                required: ["mutation", "risk", "signal"]
+              } 
+            },
             summary: { type: Type.STRING },
             memoryContext: { type: Type.STRING },
             referenceContextApplied: { type: Type.BOOLEAN }

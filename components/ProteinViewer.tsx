@@ -29,11 +29,25 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     getSnapshots: () => {
       if (!glViewer.current || status !== 'available') return { full: '', zoomed: '' };
       const viewer = glViewer.current;
+      
+      // Ensure viewer is rendered before capture
+      viewer.render();
+      
+      // Safety check for png() method which might be missing in some WebGL contexts or builds
+      const capture = (v: any) => {
+        if (typeof v.png === 'function') return v.png();
+        if (typeof v.pngURI === 'function') return v.pngURI();
+        return '';
+      };
+
       viewer.zoomTo();
-      const full = viewer.png();
+      viewer.render();
+      const full = capture(viewer);
+      
       if (mutation) {
         viewer.zoomTo({ resi: mutation.position });
-        return { full, zoomed: viewer.png() };
+        viewer.render();
+        return { full, zoomed: capture(viewer) };
       }
       return { full, zoomed: full };
     }
@@ -80,7 +94,8 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     if (!glViewer.current) {
       glViewer.current = window.$3Dmol.createViewer(viewerRef.current, { 
         backgroundColor: '#0f172a', 
-        antialias: true 
+        antialias: true,
+        preserveDrawingBuffer: true // Crucial for taking screenshots/pngs
       });
     }
 

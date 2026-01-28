@@ -11,9 +11,16 @@ export enum RiskTolerance {
   HIGH = 'High (Exploratory)'
 }
 
+export interface ExperimentalPreset {
+  name: string;
+  description: string;
+  values: string;
+}
+
 export interface PriorResult {
   mutation: string;
   outcome: 'Positive' | 'Neutral' | 'Negative';
+  notes?: string;
 }
 
 export interface Mutation {
@@ -88,6 +95,7 @@ export interface DecisionMemo {
   summary: string;
   memoryContext: string;
   referenceContextApplied: boolean;
+  logInsights?: string;
 }
 
 export interface DecisionLogEntry {

@@ -9,7 +9,7 @@ import {
   RiskTolerance,
   DecisionLogEntry
 } from './types';
-import { AMINO_ACIDS, REFERENCE_PROTEINS, ReferenceProtein } from './constants';
+import { AMINO_ACIDS, REFERENCE_PROTEINS, ReferenceProtein, EXPERIMENTAL_PRESETS } from './constants';
 import { predictMutation, searchProtein, generateDecisionMemo } from './services/geminiService';
 import MutationCard from './components/MutationCard';
 import DecisionMemo from './components/DecisionMemo';
@@ -36,21 +36,16 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
 
-  // Sync memory from log outcomes
+  // Sync memory from log outcomes and NOTES
   useEffect(() => {
-    const memoryFromLog = logEntries
+    const combined = logEntries
       .filter(e => e.outcome !== 'Not Tested Yet')
       .map(e => ({ 
         mutation: e.mutationTested, 
-        outcome: e.outcome as 'Positive' | 'Neutral' | 'Negative' 
+        outcome: e.outcome as 'Positive' | 'Neutral' | 'Negative',
+        notes: e.userNotes
       }));
     
-    const combined = [...memoryFromLog];
-    priorResults.forEach(p => {
-      if (!combined.some(c => c.mutation === p.mutation)) {
-        combined.push(p);
-      }
-    });
     setPriorResults(combined);
   }, [logEntries]);
 
@@ -108,7 +103,7 @@ const App: React.FC = () => {
       const memo = await generateDecisionMemo(
         currentProtein, 
         goal, 
-        priorResults, 
+        logEntries, 
         riskTolerance, 
         preserveRegions, 
         environment
@@ -259,8 +254,9 @@ const App: React.FC = () => {
             </div>
           </div>
           <div class="section">
-            <div class="title">4. Laboratory Notebook (Decision Log)</div>
-            <div class="log-section">
+            <div class="title">4. Integrated Lab Record</div>
+            <div class="box" style="background:#f1f5f9;">${decisionMemo.logInsights}</div>
+            <div class="log-section" style="margin-top:20px;">
               ${logsHtml || '<p style="font-size: 12px; color: #64748b; font-weight: 600; text-align: center;">No previous session logs recorded.</p>'}
             </div>
           </div>
@@ -290,7 +286,7 @@ const App: React.FC = () => {
           <div className="flex gap-3">
              {result && (
               <button onClick={downloadPIReport} className="bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg transition-all active:scale-95">
-                <i className="fa-solid fa-file-export"></i> Export Memo
+                <i className="fa-solid fa-file-export"></i> Export Comprehensive Memo
               </button>
              )}
           </div>
@@ -379,13 +375,26 @@ const App: React.FC = () => {
                         {warning && <p className="text-[9px] text-rose-600 font-black uppercase mt-1 animate-pulse">{warning}</p>}
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Experiment Context</label>
-                        <input 
-                          type="text" 
+                        <div className="flex justify-between items-center mb-2">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase">Experiment Context</label>
+                           <div className="flex gap-1">
+                              {EXPERIMENTAL_PRESETS.map(p => (
+                                <button 
+                                  key={p.name} 
+                                  onClick={() => setEnvironment(p.values)}
+                                  className="text-[7px] font-black bg-slate-100 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-slate-200 transition-colors uppercase text-slate-500 hover:text-indigo-600"
+                                  title={p.description}
+                                >
+                                  {p.name}
+                                </button>
+                              ))}
+                           </div>
+                        </div>
+                        <textarea 
                           value={environment} 
                           onChange={(e) => setEnvironment(e.target.value)} 
-                          placeholder="Standard physiological conditions" 
-                          className="w-full bg-slate-50 border-2 border-slate-100 py-3 px-4 rounded-xl text-xs font-black text-slate-900 outline-none focus:border-indigo-500" 
+                          placeholder="Standard physiological conditions or select a preset..." 
+                          className="w-full bg-slate-50 border-2 border-slate-100 py-3 px-4 rounded-xl text-xs font-black text-slate-900 outline-none focus:border-indigo-500 min-h-[80px]" 
                         />
                       </div>
                     </div>

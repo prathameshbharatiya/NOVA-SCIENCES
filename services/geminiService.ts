@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo, RiskTolerance } from "../types";
+import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo, RiskTolerance, DecisionLogEntry } from "../types";
 
 const MODEL_NAME = "gemini-3-flash-preview";
 
@@ -98,10 +98,10 @@ export const predictMutation = async (
       contents: `NOVA DECISION ENGINE: Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}. 
       DECISION PARAMETERS: 
       - Risk Tolerance: ${risk}
-      - Preservation Constraint: ${preserve || "None"} (NEVER suggest mutations here)
+      - Preservation Constraint: ${preserve || "None"}
       - Environment: ${environment || "Standard physiological conditions"}
       
-      EXPERIMENTAL MEMORY (LOGGED OUTCOMES): ${JSON.stringify(priorResults)}`,
+      SCIENTIFIC MEMORY (LOGGED OUTCOMES & SCIENTIST NOTES): ${JSON.stringify(priorResults)}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -156,7 +156,7 @@ export const predictMutation = async (
 export const generateDecisionMemo = async (
   protein: ProteinMetadata, 
   goal: ScientificGoal, 
-  priorResults: PriorResult[],
+  priorLogs: DecisionLogEntry[],
   risk: RiskTolerance,
   preserve: string,
   environment: string
@@ -164,14 +164,25 @@ export const generateDecisionMemo = async (
   const apiKey = process.env.API_KEY;
   if (!apiKey) throw new Error("API_KEY missing.");
   const ai = new GoogleGenAI({ apiKey });
+
+  const history = priorLogs.map(l => ({
+    mutation: l.mutationTested,
+    outcome: l.outcome,
+    notes: l.userNotes,
+    prediction: l.prediction?.stabilityImpact
+  }));
+
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `NOVA MEMO GENERATOR: Synthesize a decision-first memo for ${protein.name} (${protein.id}). 
-      FOCUS: ${goal}. 
+      contents: `NOVA COMPREHENSIVE MEMO GENERATOR: Synthesis report for ${protein.name} (${protein.id}). 
+      OVERALL MISSION: ${goal}. 
       CONSTRAINTS: Risk=${risk}, Preservation=${preserve}, Env=${environment}. 
-      MEMO RULE: Prioritize actionable reasoning over descriptive theory. 
-      EXPERIMENTAL MEMORY: ${JSON.stringify(priorResults)}`,
+      
+      COMPLETE LABORATORY RECORD (User Notes & Outcomes):
+      ${JSON.stringify(history)}
+
+      TASK: Synthesize all current findings. If the user has provided notes for previous mutations, analyze their significance. Summarize what we have learned from the logged experiments.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -206,9 +217,10 @@ export const generateDecisionMemo = async (
             },
             summary: { type: Type.STRING },
             memoryContext: { type: Type.STRING },
-            referenceContextApplied: { type: Type.BOOLEAN }
+            referenceContextApplied: { type: Type.BOOLEAN },
+            logInsights: { type: Type.STRING }
           },
-          required: ["recommended", "discouraged", "summary", "memoryContext", "referenceContextApplied"]
+          required: ["recommended", "discouraged", "summary", "memoryContext", "referenceContextApplied", "logInsights"]
         }
       }
     });

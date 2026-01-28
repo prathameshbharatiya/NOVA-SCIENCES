@@ -1,6 +1,15 @@
+import { ExperimentalPreset } from "./types";
 
 export const AMINO_ACIDS = [
   'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y'
+];
+
+export const EXPERIMENTAL_PRESETS: ExperimentalPreset[] = [
+  { name: 'Physiological', description: 'Human body core', values: 'pH 7.4, 37°C, 150mM NaCl' },
+  { name: 'Lysosomal', description: 'Acidic degradation', values: 'pH 4.8, 37°C, Low Ionic Strength' },
+  { name: 'Cryo-EM', description: 'Low temp imaging', values: 'pH 8.0, 4°C, 50mM HEPES, 100mM NaCl' },
+  { name: 'Hyper-Saline', description: 'High salt stability', values: 'pH 7.0, 25°C, 2M NaCl, 10% Glycerol' },
+  { name: 'Denaturing', description: 'Urea-induced stress', values: 'pH 7.5, 25°C, 4M Urea, 1mM DTT' }
 ];
 
 export interface ReferenceProtein {

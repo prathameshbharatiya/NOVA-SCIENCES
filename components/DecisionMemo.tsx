@@ -22,6 +22,14 @@ const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal, onSelectMutatio
             </div>
           </div>
           <p className="text-sm font-medium leading-relaxed opacity-90">{memo.summary}</p>
+          
+          {memo.logInsights && (
+            <div className="mt-6 p-4 bg-white/5 border border-white/10 rounded-2xl">
+              <h4 className="text-[9px] font-black uppercase tracking-widest text-indigo-200 mb-2">Synthesis of Laboratory Memory</h4>
+              <p className="text-[11px] font-bold leading-relaxed">{memo.logInsights}</p>
+            </div>
+          )}
+
           <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-indigo-200 bg-black/10 p-2 rounded-xl border border-white/5">
             <i className="fa-solid fa-history"></i>
             <span>Memory Context: {memo.memoryContext}</span>

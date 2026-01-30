@@ -115,6 +115,16 @@ export interface DecisionLogEntry {
   outcome: 'Positive' | 'Neutral' | 'Negative' | 'Not Tested Yet';
 }
 
+export interface SystemAuditTrail {
+  sessionId: string;
+  startTime: string;
+  events: Array<{
+    timestamp: string;
+    feature: string;
+    details: string;
+  }>;
+}
+
 export type StructureStatus = 'idle' | 'fetching' | 'available' | 'unavailable' | 'error';
 
 export interface ProteinMetadata {

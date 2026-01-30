@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,13 +10,13 @@
     <!-- 3Dmol.js for protein visualization -->
     <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
+            background-color: #fcfdfe;
         }
         .mono {
-            font-family: 'JetBrains+Mono', monospace;
+            font-family: 'JetBrains Mono', monospace;
         }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -29,6 +30,22 @@
         .animate-slide-in {
             animation: slideIn 0.3s ease-out forwards;
         }
+
+        @keyframes revealContainer {
+            0% { transform: translateY(20px); opacity: 0; filter: blur(10px); }
+            100% { transform: translateY(0); opacity: 1; filter: blur(0); }
+        }
+        .reveal-active {
+            animation: revealContainer 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        @keyframes loadingPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        .loading-pulse {
+            animation: loadingPulse 2s infinite ease-in-out;
+        }
     </style>
 <script type="importmap">
 {
@@ -37,10 +54,10 @@
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
     "@google/genai": "https://esm.sh/@google/genai@1.38.0",
-    "@vercel/analytics/react": "https://esm.sh/@vercel/analytics@1.6.1/react?external=react,react-dom",
     "@vercel/analytics": "https://esm.sh/@vercel/analytics@1.6.1",
-    "@vercel/analytics/": "https://esm.sh/@vercel/analytics@^1.6.1/",
+    "@vercel/analytics/react": "https://esm.sh/@vercel/analytics@1.6.1/react?external=react,react-dom",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "@vercel/analytics/": "https://esm.sh/@vercel/analytics@^1.6.1/",
     "react/": "https://esm.sh/react@^19.2.4/",
     "vite": "https://esm.sh/vite@^7.3.1",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"

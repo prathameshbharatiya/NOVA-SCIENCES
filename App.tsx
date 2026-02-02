@@ -46,7 +46,6 @@ const App: React.FC = () => {
   const [preserveRegions, setPreserveRegions] = useState('');
   const [environment, setEnvironment] = useState('');
   
-  // Dashboard State
   const [activeTab, setActiveTab] = useState<DashboardTab>('analysis');
   const [hasNewRoadmap, setHasNewRoadmap] = useState(false);
   const [showIdealizedMutant, setShowIdealizedMutant] = useState(false);
@@ -73,16 +72,15 @@ const App: React.FC = () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(auditTrail));
   }, [auditTrail]);
 
-  // Observer to detect when the scientist views the results
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && isRevealing) {
+        if (entry.isIntersecting && (result || decisionMemo)) {
           setHasViewedResults(true);
           setShowSuccessToast(false);
         }
       },
-      { threshold: 0.2 }
+      { threshold: 0.1 }
     );
 
     if (resultsContainerRef.current) {
@@ -90,7 +88,7 @@ const App: React.FC = () => {
     }
 
     return () => observer.disconnect();
-  }, [isRevealing]);
+  }, [result, decisionMemo]);
 
   const logEvent = (feature: string, details: string) => {
     const timestamp = new Date().toISOString();
@@ -123,6 +121,412 @@ const App: React.FC = () => {
     setPriorResults(combined);
   }, [logEntries]);
 
+  const handleExportMemo = () => {
+    if (logEntries.length === 0) return;
+    
+    logEvent('MEMO_EXPORT', `Exporting High-Fidelity Comprehensive Scientific Report for ${currentProtein?.id || 'session'}`);
+    
+    const htmlHeader = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Scientific Memo - ${currentProtein?.id} - Novasciences</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        :root {
+          --primary: #4f46e5;
+          --slate-900: #0f172a;
+          --slate-800: #1e293b;
+          --slate-100: #f1f5f9;
+          --emerald: #10b981;
+          --rose: #ef4444;
+          --amber: #f59e0b;
+        }
+
+        body { 
+          font-family: 'Inter', sans-serif; 
+          line-height: 1.6; 
+          color: #1e293b; 
+          background: #f8fafc; 
+          margin: 0;
+          padding: 60px 20px;
+        }
+
+        .report-wrapper {
+          max-width: 1100px;
+          margin: 0 auto;
+          background: white;
+          padding: 80px;
+          border-radius: 40px;
+          box-shadow: 0 50px 100px -20px rgba(0,0,0,0.1);
+          border: 1px solid var(--slate-100);
+        }
+
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          border-bottom: 6px solid var(--primary);
+          padding-bottom: 40px;
+          margin-bottom: 60px;
+        }
+
+        .header-logo {
+          font-weight: 900;
+          font-size: 32px;
+          text-transform: lowercase;
+          letter-spacing: -0.05em;
+          color: var(--slate-900);
+        }
+
+        .header-logo span { color: var(--primary); }
+
+        .header-meta {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          color: #94a3b8;
+          text-align: right;
+          line-height: 1.8;
+        }
+
+        .section-title {
+          font-size: 13px;
+          font-weight: 900;
+          text-transform: uppercase;
+          letter-spacing: 0.3em;
+          color: var(--primary);
+          border-bottom: 2px solid var(--slate-100);
+          padding-bottom: 15px;
+          margin: 60px 0 30px 0;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-cols: repeat(4, 1fr);
+          gap: 20px;
+          margin-bottom: 40px;
+        }
+
+        .stat-card {
+          background: var(--slate-100);
+          padding: 25px;
+          border-radius: 25px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .stat-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 10px; }
+        .stat-value { font-size: 18px; font-weight: 900; color: var(--slate-900); }
+
+        .log-entry {
+          background: white;
+          border: 2px solid var(--slate-100);
+          border-radius: 35px;
+          padding: 40px;
+          margin-bottom: 40px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .log-entry::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 8px;
+          height: 100%;
+          background: var(--primary);
+        }
+
+        .entry-header {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 30px;
+        }
+
+        .mut-label { font-size: 42px; font-weight: 900; color: var(--slate-900); letter-spacing: -0.05em; line-height: 1; }
+        
+        .score-badge {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+        }
+
+        .confidence-score {
+          font-size: 28px;
+          font-weight: 900;
+          color: var(--primary);
+        }
+
+        .confidence-label { font-size: 10px; font-weight: 800; color: #94a3b8; text-transform: uppercase; }
+
+        .snapshot-box {
+          width: 100%;
+          border-radius: 25px;
+          border: 4px solid var(--slate-100);
+          margin: 30px 0;
+          background: #0f172a;
+        }
+
+        .reasoning-grid {
+          display: grid;
+          grid-template-cols: 1.5fr 1fr;
+          gap: 40px;
+        }
+
+        .detail-block h4 { font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 15px; }
+        .detail-block p { font-size: 14px; color: var(--slate-800); font-weight: 500; }
+
+        .outcome-tag {
+          display: inline-block;
+          padding: 6px 15px;
+          border-radius: 12px;
+          font-size: 10px;
+          font-weight: 900;
+          text-transform: uppercase;
+          margin-top: 10px;
+        }
+
+        .tag-Positive { background: #dcfce7; color: #166534; }
+        .tag-Negative { background: #fee2e2; color: #991b1b; }
+        .tag-Neutral { background: #f1f5f9; color: #475569; }
+        .tag-Pending { background: #e0e7ff; color: #3730a3; }
+
+        .roadmap-card {
+          border: 2px solid var(--slate-100);
+          border-radius: 30px;
+          padding: 30px;
+          background: white;
+          border-left: 8px solid var(--emerald);
+        }
+
+        .discouraged-card {
+          border-left-color: var(--rose);
+          background: #fffafa;
+        }
+
+        .ref-list {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          color: #64748b;
+          list-style: none;
+          padding: 0;
+        }
+
+        .ref-list li { margin-bottom: 8px; }
+
+        footer {
+          margin-top: 100px;
+          text-align: center;
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: #94a3b8;
+          letter-spacing: 0.2em;
+        }
+
+        @media print {
+          body { background: white; padding: 0; }
+          .report-wrapper { box-shadow: none; border: none; padding: 40px; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-wrapper">
+        <header class="header">
+            <div>
+                <div class="header-logo">novasciences <span>report</span></div>
+                <div style="font-weight: 800; font-size: 18px; color: var(--slate-900); margin-top: 10px;">
+                    ${currentProtein?.name} [${currentProtein?.id}]
+                </div>
+            </div>
+            <div class="header-meta">
+                REFERENCE: ${auditTrail.sessionId}<br>
+                COMPILED: ${new Date().toLocaleString()}<br>
+                MODEL: NOVACore-X 0.2.5
+            </div>
+        </header>
+
+        <section>
+            <h2 class="section-title">Mission Parameters</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Objective</div>
+                    <div class="stat-value">${goal}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Risk Threshold</div>
+                    <div class="stat-value">${riskTolerance}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Protein Length</div>
+                    <div class="stat-value">${currentProtein?.length} AA</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Simulations Run</div>
+                    <div class="stat-value">${logEntries.length}</div>
+                </div>
+            </div>
+        </section>`;
+
+    let roadmapHtml = '';
+    if (decisionMemo) {
+      roadmapHtml = `
+        <section>
+            <h2 class="section-title">Strategic Roadmap Summary</h2>
+            <div style="background: var(--slate-900); color: white; padding: 40px; border-radius: 35px; margin-bottom: 40px;">
+                <h4 style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--primary); margin-bottom: 15px;">Executive Synthesis</h4>
+                <p style="font-size: 16px; font-weight: 600; line-height: 1.5; font-style: italic;">"${decisionMemo.summary}"</p>
+                <div style="margin-top: 25px; display: flex; gap: 30px;">
+                    <div>
+                        <div style="font-size: 9px; font-weight: 800; opacity: 0.5; text-transform: uppercase;">Memory Context</div>
+                        <div style="font-size: 12px; font-weight: 700;">${decisionMemo.memoryContext}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 9px; font-weight: 800; opacity: 0.5; text-transform: uppercase;">Reference Grounding</div>
+                        <div style="font-size: 12px; font-weight: 700;">${decisionMemo.referenceContextApplied ? 'Active' : 'Bypassed'}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
+                ${decisionMemo.recommended.map(rec => `
+                    <div class="roadmap-card">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div class="mut-label" style="font-size: 32px;">${rec.mutation}</div>
+                            <div style="text-align: right;">
+                                <div class="confidence-label">Confidence Score</div>
+                                <div class="confidence-score" style="font-size: 20px;">${rec.confidenceBreakdown?.overallConfidence || rec.confidence}</div>
+                            </div>
+                        </div>
+                        <p style="font-size: 13px; font-weight: 600; color: #475569; margin: 15px 0;">${rec.rationale}</p>
+                        <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--emerald);">
+                            Alignment: ${rec.goalAlignment} | Risk: ${rec.risk}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <h3 style="font-size: 12px; font-weight: 900; color: var(--rose); margin: 40px 0 20px 0; text-transform: uppercase;">Pathology Red-Flags</h3>
+            <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 20px;">
+                ${decisionMemo.discouraged.map(disc => `
+                    <div class="roadmap-card discouraged-card">
+                        <div style="font-size: 24px; font-weight: 900; color: #991b1b;">${disc.mutation}</div>
+                        <p style="font-size: 12px; font-weight: 600; color: #b91c1c; margin: 10px 0;">${disc.risk}</p>
+                        <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: #ef4444;">Signal: ${disc.signal}</div>
+                    </div>
+                `).join('')}
+            </div>
+        </section>`;
+    }
+
+    const decisionLogHtml = `
+        <section>
+            <h2 class="section-title">Detailed Atomic Simulations</h2>
+            ${logEntries.map((entry, idx) => `
+                <div class="log-entry">
+                    <div class="entry-header">
+                        <div>
+                            <div class="mut-label">${entry.mutationTested}</div>
+                            <div class="outcome-tag tag-${entry.outcome.replace(/\s+/g, '')}">Status: ${entry.outcome}</div>
+                        </div>
+                        <div class="score-badge">
+                            <div class="confidence-label">Simulation Trust</div>
+                            <div class="confidence-score">${entry.prediction?.confidence ? (entry.prediction.confidence * 100).toFixed(0) + '%' : (entry.prediction?.confidenceBreakdown?.overallConfidence || 'N/A')}</div>
+                            <div style="font-size: 11px; font-weight: 800; color: var(--primary); margin-top: 10px;">
+                                &Delta;&Delta;G: ${entry.prediction?.deltaDeltaG.toFixed(2)} kcal/mol
+                            </div>
+                        </div>
+                    </div>
+
+                    ${entry.snapshots?.zoomed ? `
+                        <div class="snapshot-box">
+                            <img src="${entry.snapshots.zoomed}" style="width: 100%; border-radius: 20px;" alt="Atomic Snapshot">
+                        </div>
+                    ` : ''}
+
+                    <div class="reasoning-grid">
+                        <div class="detail-block">
+                            <h4>Scientific Rationale & Synthesis</h4>
+                            <p style="font-style: italic;">"${entry.prediction?.reportSummary || 'N/A'}"</p>
+                            <p style="margin-top: 15px;">${entry.prediction?.justification || 'N/A'}</p>
+                            
+                            <h4 style="margin-top: 30px;">Structural Analysis</h4>
+                            <p>${entry.prediction?.structuralAnalysis || 'N/A'}</p>
+                        </div>
+                        <div class="detail-block">
+                            <h4>Confidence Matrix</h4>
+                            <div style="background: var(--slate-100); padding: 20px; border-radius: 20px;">
+                                <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 15px;">
+                                    ${Object.entries(entry.prediction?.confidenceBreakdown || {}).filter(([k]) => k !== 'confidenceRationale').map(([key, val]) => `
+                                        <div>
+                                            <div style="font-size: 8px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">${key.replace(/([A-Z])/g, ' $1').trim()}</div>
+                                            <div style="font-size: 12px; font-weight: 700; color: var(--slate-900);">${val}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                <div style="margin-top: 15px; font-size: 11px; color: #64748b; font-weight: 600;">
+                                    ${entry.prediction?.confidenceBreakdown?.confidenceRationale || ''}
+                                </div>
+                            </div>
+
+                            <h4 style="margin-top: 30px;">Scientist Observations</h4>
+                            <div style="background: #fffbeb; border: 1px solid #fde68a; padding: 20px; border-radius: 20px; color: #92400e; font-size: 13px; font-weight: 600;">
+                                ${entry.userNotes ? `"${entry.userNotes}"` : 'No laboratory observations recorded for this entry.'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 40px; display: grid; grid-template-cols: 1fr 1fr 1fr; gap: 30px; padding-top: 30px; border-top: 1px dashed var(--slate-100);">
+                        <div>
+                            <h4>Impact Category</h4>
+                            <p style="font-weight: 800; color: var(--slate-900);">${entry.prediction?.stabilityImpact || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <h4>Functional Sensitivity</h4>
+                            <p style="font-weight: 800; color: var(--slate-900);">${entry.prediction?.functionalRegionSensitivity || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <h4>Clinical Relevance</h4>
+                            <p style="font-weight: 800; color: var(--slate-900);">${entry.prediction?.clinicalSignificance || 'N/A'}</p>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 30px; background: #fafafa; padding: 15px; border-radius: 15px; font-family: 'JetBrains Mono', monospace; font-size: 10px;">
+                        RUN_ID: ${entry.prediction?.reproducibility?.runId} | INPUT_HASH: ${entry.prediction?.reproducibility?.inputHash} | DOCKER_IMG: ${entry.prediction?.reproducibility?.dockerImageHash}
+                    </div>
+                </div>
+            `).join('')}
+        </section>
+
+        <section>
+            <h2 class="section-title">Scientific References & Evidence</h2>
+            <ul class="ref-list">
+                ${logEntries.flatMap(e => e.prediction?.references || []).filter((v, i, a) => a.indexOf(v) === i).map(ref => `<li>[REF] ${ref}</li>`).join('')}
+                ${!logEntries.some(e => e.prediction?.references?.length) ? '<li>No automated references indexed for this session.</li>' : ''}
+            </ul>
+        </section>
+
+        <footer>
+            Novasciences Lab Automation Suite v0.2.5 — Proprietary Diagnostic Intelligence — Confidential
+        </footer>
+    </div>
+</body>
+</html>`;
+
+    const fullHtml = htmlHeader + roadmapHtml + decisionLogHtml;
+    const blob = new Blob([fullHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Novasciences_Memo_${currentProtein?.id || 'Session'}_${new Date().getTime()}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const parseMutationString = (mutStr: string) => {
     const match = mutStr.match(/([A-Z])(\d+)([A-Z])/i);
     if (match) {
@@ -141,7 +545,7 @@ const App: React.FC = () => {
     if (!currentProtein) return;
     setIsPredicting(true);
     setIsRevealing(false);
-    setHasViewedResults(false); // Reset for new analysis
+    setHasViewedResults(false); 
     setError(null);
     setShowSuccessToast(false);
     logEvent('PREDICTION_START', `Analyzing ${mutation.wildtype}${mutation.position}${mutation.mutant} for ${currentProtein.id}`);
@@ -193,12 +597,10 @@ const App: React.FC = () => {
       setLogEntries(prev => [newEntry, ...prev]);
       logEvent('PREDICTION_SUCCESS', `Analysis complete: ΔΔG ${pred.deltaDeltaG.toFixed(2)}`);
       
-      // Auto-scroll to full-width results section
       setTimeout(() => {
         resultsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 500);
 
-      // Auto-hide toast
       setTimeout(() => setShowSuccessToast(false), 8000);
 
     } catch (err: any) {
@@ -274,7 +676,7 @@ const App: React.FC = () => {
           <div className="flex gap-3">
              <button onClick={() => window.location.reload()} className="text-rose-400 hover:text-rose-300 text-[10px] font-black uppercase px-4 py-2 rounded-xl hover:bg-rose-500/10 transition-all">Reset Session</button>
              {logEntries.length > 0 && (
-              <button className="bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg transition-all active:scale-95 text-white">
+              <button onClick={handleExportMemo} className="bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg transition-all active:scale-95 text-white">
                 <i className="fa-solid fa-file-export"></i> Export Memo
               </button>
              )}
@@ -282,11 +684,10 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      {/* Floating Indicator - Only shows if results ARE ready but NOT YET viewed */}
-      {result && !hasViewedResults && (
+      {(result || decisionMemo) && !hasViewedResults && (
         <button 
           onClick={scrollToResult}
-          className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[70] bg-[#0f172a] text-white px-8 py-4 rounded-full shadow-2xl border-2 border-indigo-500 animate-bounce transition-all hover:scale-110 active:scale-95 flex items-center gap-3 group"
+          className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[70] bg-[#0f172a] text-white px-8 py-4 rounded-full shadow-2xl border-2 border-indigo-500 transition-all hover:scale-110 active:scale-95 flex items-center gap-3 group"
         >
           <i className="fa-solid fa-flask-vial text-indigo-400 group-hover:rotate-12 transition-transform"></i>
           <span className="text-[10px] font-black uppercase tracking-widest">Active Analysis Data Below</span>
@@ -294,7 +695,6 @@ const App: React.FC = () => {
         </button>
       )}
 
-      {/* Success Notification */}
       {showSuccessToast && result && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-500">
            <div className="bg-indigo-600 text-white px-10 py-5 rounded-[2.5rem] shadow-[0_35px_60px_-15px_rgba(79,70,229,0.5)] border-4 border-white/20 flex items-center gap-8">
@@ -400,14 +800,13 @@ const App: React.FC = () => {
                       <span className="text-[10px] font-black text-white uppercase tracking-widest">Show idealized mutant side chain</span>
                     </div>
 
-                    {/* Quick navigation anchor when result exists and NOT YET viewed */}
-                    {result && !isPredicting && !hasViewedResults && (
+                    {(result || decisionMemo) && !isPredicting && !hasViewedResults && (
                       <div className="absolute bottom-8 right-8 animate-in slide-in-from-right-4">
                         <button 
                           onClick={scrollToResult}
                           className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase shadow-2xl flex items-center gap-2 hover:bg-indigo-700 transition-all active:scale-95"
                         >
-                          View {mutation.wildtype}{mutation.position}{mutation.mutant} Data <i className="fa-solid fa-arrow-down"></i>
+                          View Results Data <i className="fa-solid fa-arrow-down"></i>
                         </button>
                       </div>
                     )}
@@ -416,9 +815,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* FULL-WIDTH RESULTS SECTION */}
             <div ref={resultsContainerRef} className="pt-20 border-t-8 border-slate-100 scroll-mt-24">
-              {/* STICKY TAB NAVIGATOR */}
               <div className="sticky top-[72px] z-50 py-4 bg-[#fcfdfe]/80 backdrop-blur-md">
                 <div className="flex bg-white rounded-[2rem] p-2 border-2 border-slate-100 shadow-2xl gap-2 w-full max-w-2xl mx-auto">
                   <button onClick={() => setActiveTab('analysis')} className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${activeTab === 'analysis' ? 'bg-[#0f172a] text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'}`}>

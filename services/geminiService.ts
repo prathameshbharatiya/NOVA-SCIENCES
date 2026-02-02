@@ -101,7 +101,14 @@ export const predictMutation = async (
       - Preservation Constraint: ${preserve || "None"}
       - Environment: ${environment || "Standard physiological conditions"}
       
-      SCIENTIFIC MEMORY (LOGGED OUTCOMES & SCIENTIST NOTES): ${JSON.stringify(priorResults)}`,
+      SCIENTIFIC MEMORY (LOGGED OUTCOMES & SCIENTIST NOTES): ${JSON.stringify(priorResults)}
+
+      CORE HEURISTIC TASKS:
+      1. Confidence Breakdown: Explain uncertainty across structural, disorder, functional, environmental, and experimental factors.
+      2. Functional Sensitivity Scoring: Classify as High (active sites/interfaces), Medium (structured core), or Low (surface loops).
+      3. Environment-Tradeoff Mapping: Align reasoning based on the specified environment (e.g., temp spikes prioritize stability).
+      4. Comparative Context: Framing mutation relative to other possible choices at this site.
+      5. Failure-Awareness: Explicitly mention if similar regions/substitutions failed based on the scientific memory.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -125,9 +132,24 @@ export const predictMutation = async (
             reportSummary: { type: Type.STRING },
             goalAlignment: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
             tradeOffAnalysis: { type: Type.STRING },
-            justification: { type: Type.STRING }
+            justification: { type: Type.STRING },
+            functionalRegionSensitivity: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+            comparativeContext: { type: Type.STRING },
+            confidenceBreakdown: {
+              type: Type.OBJECT,
+              properties: {
+                structuralConfidence: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+                disorderRisk: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+                functionalSensitivity: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+                environmentalMismatch: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+                experimentalEvidence: { type: Type.STRING, enum: ["None", "Mixed", "Supporting", "Contradictory"] },
+                overallConfidence: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
+                confidenceRationale: { type: Type.STRING }
+              },
+              required: ["structuralConfidence", "disorderRisk", "functionalSensitivity", "environmentalMismatch", "experimentalEvidence", "overallConfidence", "confidenceRationale"]
+            }
           },
-          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "relativeRank", "goalAlignment", "tradeOffAnalysis", "justification", "riskBreakdown", "structuralAnalysis", "reportSummary"]
+          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "relativeRank", "goalAlignment", "tradeOffAnalysis", "justification", "riskBreakdown", "structuralAnalysis", "reportSummary", "confidenceBreakdown", "functionalRegionSensitivity", "comparativeContext"]
         }
       }
     });
@@ -182,7 +204,11 @@ export const generateDecisionMemo = async (
       COMPLETE LABORATORY RECORD (User Notes & Outcomes):
       ${JSON.stringify(history)}
 
-      TASK: Synthesize all current findings. If the user has provided notes for previous mutations, analyze their significance. Summarize what we have learned from the logged experiments.`,
+      TASK:
+      1. Synthesize current findings and learned patterns from laboratory history.
+      2. Identify negative knowledge (where things have consistently failed).
+      3. Recommend targets with a focus on uncertainty transparency.
+      4. Provide a full Confidence Breakdown for each recommendation.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -198,9 +224,22 @@ export const generateDecisionMemo = async (
                   rationale: { type: Type.STRING }, 
                   goalAlignment: { type: Type.STRING }, 
                   confidence: { type: Type.STRING }, 
-                  risk: { type: Type.STRING } 
+                  risk: { type: Type.STRING },
+                  confidenceBreakdown: {
+                    type: Type.OBJECT,
+                    properties: {
+                      structuralConfidence: { type: Type.STRING },
+                      disorderRisk: { type: Type.STRING },
+                      functionalSensitivity: { type: Type.STRING },
+                      environmentalMismatch: { type: Type.STRING },
+                      experimentalEvidence: { type: Type.STRING },
+                      overallConfidence: { type: Type.STRING },
+                      confidenceRationale: { type: Type.STRING }
+                    },
+                    required: ["overallConfidence", "confidenceRationale"]
+                  }
                 },
-                required: ["rank", "mutation", "rationale", "goalAlignment", "confidence", "risk"]
+                required: ["rank", "mutation", "rationale", "goalAlignment", "confidence", "risk", "confidenceBreakdown"]
               } 
             },
             discouraged: { 
@@ -218,9 +257,10 @@ export const generateDecisionMemo = async (
             summary: { type: Type.STRING },
             memoryContext: { type: Type.STRING },
             referenceContextApplied: { type: Type.BOOLEAN },
-            logInsights: { type: Type.STRING }
+            logInsights: { type: Type.STRING },
+            failureAwareNotes: { type: Type.STRING }
           },
-          required: ["recommended", "discouraged", "summary", "memoryContext", "referenceContextApplied", "logInsights"]
+          required: ["recommended", "discouraged", "summary", "memoryContext", "referenceContextApplied", "logInsights", "failureAwareNotes"]
         }
       }
     });

@@ -29,6 +29,16 @@ export interface Mutation {
   mutant: string;
 }
 
+export interface ConfidenceBreakdown {
+  structuralConfidence: 'High' | 'Medium' | 'Low';
+  disorderRisk: 'Low' | 'Medium' | 'High';
+  functionalSensitivity: 'Low' | 'Medium' | 'High';
+  environmentalMismatch: 'Low' | 'Medium' | 'High';
+  experimentalEvidence: 'None' | 'Mixed' | 'Supporting' | 'Contradictory';
+  overallConfidence: 'High' | 'Medium' | 'Low';
+  confidenceRationale: string;
+}
+
 export interface ReproducibilityMetadata {
   runId: string;
   timestamp: string;
@@ -71,6 +81,9 @@ export interface PredictionResult {
   tradeOffAnalysis: string;
   justification: string;
   isValidatedReference: boolean;
+  confidenceBreakdown: ConfidenceBreakdown;
+  functionalRegionSensitivity: 'High' | 'Medium' | 'Low';
+  comparativeContext: string;
   guardrails?: {
     isLargeProtein: boolean;
     isInDisorderedRegion: boolean;
@@ -86,6 +99,7 @@ export interface DecisionMemo {
     goalAlignment: string;
     confidence: string;
     risk: string;
+    confidenceBreakdown?: ConfidenceBreakdown;
   }>;
   discouraged: Array<{
     mutation: string;
@@ -96,6 +110,7 @@ export interface DecisionMemo {
   memoryContext: string;
   referenceContextApplied: boolean;
   logInsights?: string;
+  failureAwareNotes?: string;
 }
 
 export interface DecisionLogEntry {

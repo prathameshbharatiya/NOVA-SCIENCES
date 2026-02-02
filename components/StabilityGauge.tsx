@@ -2,18 +2,45 @@ import React from 'react';
 
 interface StabilityGaugeProps {
   value: number; // kcal/mol
+  compact?: boolean;
 }
 
-const StabilityGauge: React.FC<StabilityGaugeProps> = ({ value }) => {
+const StabilityGauge: React.FC<StabilityGaugeProps> = ({ value, compact = false }) => {
   // Normalize value for a -5 to +5 scale (typical range for ddG)
   const normalized = Math.min(Math.max(value, -5), 5);
   const percentage = ((normalized + 5) / 10) * 100;
 
   let color = 'bg-slate-400';
-  if (value < -2) color = 'bg-rose-600'; // Highly Destabilizing
-  else if (value < -0.5) color = 'bg-amber-500'; // Destabilizing
-  else if (value < 0.5) color = 'bg-blue-400'; // Neutral
+  if (value < -2) color = 'bg-rose-500'; // Highly Destabilizing
+  else if (value < -0.5) color = 'bg-orange-500'; // Destabilizing
+  else if (value < 0.5) color = 'bg-indigo-400'; // Neutral
   else color = 'bg-emerald-500'; // Stabilizing
+
+  if (compact) {
+    return (
+      <div className="w-full">
+        <div className="flex flex-col items-center mb-2">
+          <div className="text-xl font-black text-slate-900 mono">
+            {value > 0 ? '+' : ''}{value.toFixed(2)}
+            <span className="text-[8px] ml-1 text-slate-400 uppercase tracking-widest font-black">kcal</span>
+          </div>
+        </div>
+        <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden relative border border-slate-200/50">
+          <div 
+            className={`h-full transition-all duration-1000 ease-out flex items-center justify-end pr-2 shadow-sm ${color}`}
+            style={{ width: `${percentage}%` }}
+          >
+          </div>
+          <div className="absolute left-1/2 top-0 bottom-0 w-px bg-slate-300"></div>
+        </div>
+        <div className="flex justify-between mt-1 text-[6px] font-black text-slate-400 uppercase tracking-tighter">
+          <span>DESTAB</span>
+          <span>NEUTRAL</span>
+          <span>STAB</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100 shadow-inner">

@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Mutation, 
@@ -11,7 +10,7 @@ import {
   DecisionLogEntry,
   SystemAuditTrail
 } from './types';
-import { REFERENCE_PROTEINS, ReferenceProtein, EXPERIMENTAL_PRESETS } from './constants';
+import { REFERENCE_PROTEINS, ReferenceProtein } from './constants';
 import { predictMutation, searchProtein, generateDecisionMemo } from './services/geminiService';
 import MutationCard from './components/MutationCard';
 import DecisionMemo from './components/DecisionMemo';
@@ -22,8 +21,9 @@ import { track } from '@vercel/analytics';
 const SESSION_KEY = 'novasciences_session_v025';
 const LOGS_KEY = 'novasciences_logs_v025';
 
+type DashboardTab = 'analysis' | 'roadmap';
+
 const App: React.FC = () => {
-  // Persistence Loading
   const [logEntries, setLogEntries] = useState<DecisionLogEntry[]>(() => {
     const saved = localStorage.getItem(LOGS_KEY);
     return saved ? JSON.parse(saved) : [];
@@ -46,19 +46,25 @@ const App: React.FC = () => {
   const [preserveRegions, setPreserveRegions] = useState('');
   const [environment, setEnvironment] = useState('');
   
+  // Dashboard State
+  const [activeTab, setActiveTab] = useState<DashboardTab>('analysis');
+  const [hasNewRoadmap, setHasNewRoadmap] = useState(false);
+  const [showIdealizedMutant, setShowIdealizedMutant] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [hasViewedResults, setHasViewedResults] = useState(false);
+  
   const [priorResults, setPriorResults] = useState<PriorResult[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
   const viewerHandleRef = useRef<ProteinViewerHandle>(null);
+  const resultsContainerRef = useRef<HTMLDivElement>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isPredicting, setIsPredicting] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [decisionMemo, setDecisionMemo] = useState<DecisionMemoType | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
 
-  // Persistence Sync
   useEffect(() => {
     localStorage.setItem(LOGS_KEY, JSON.stringify(logEntries));
   }, [logEntries]);
@@ -66,6 +72,25 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(SESSION_KEY, JSON.stringify(auditTrail));
   }, [auditTrail]);
+
+  // Observer to detect when the scientist views the results
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && isRevealing) {
+          setHasViewedResults(true);
+          setShowSuccessToast(false);
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    if (resultsContainerRef.current) {
+      observer.observe(resultsContainerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [isRevealing]);
 
   const logEvent = (feature: string, details: string) => {
     const timestamp = new Date().toISOString();
@@ -98,28 +123,6 @@ const App: React.FC = () => {
     setPriorResults(combined);
   }, [logEntries]);
 
-  useEffect(() => {
-    if (!preserveRegions) {
-      setWarning(null);
-      return;
-    }
-    const regions = preserveRegions.split(',').map(r => r.trim().toLowerCase());
-    const pos = mutation.position.toString();
-    const isRestricted = regions.some(r => {
-      if (r.includes('-')) {
-        const [start, end] = r.split('-').map(Number);
-        return mutation.position >= start && mutation.position <= end;
-      }
-      return r === pos;
-    });
-
-    if (isRestricted) {
-      setWarning(`PRESERVATION ALERT: Residue ${mutation.position} is within a protected region.`);
-    } else {
-      setWarning(null);
-    }
-  }, [mutation.position, preserveRegions]);
-
   const parseMutationString = (mutStr: string) => {
     const match = mutStr.match(/([A-Z])(\d+)([A-Z])/i);
     if (match) {
@@ -129,6 +132,7 @@ const App: React.FC = () => {
         mutant: match[3].toUpperCase() 
       });
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      setActiveTab('analysis');
       logEvent('MUTATION_SELECT', `Residue target set to ${mutStr}`);
     }
   };
@@ -137,9 +141,9 @@ const App: React.FC = () => {
     if (!currentProtein) return;
     setIsPredicting(true);
     setIsRevealing(false);
-    setResult(null);
-    setDecisionMemo(null);
+    setHasViewedResults(false); // Reset for new analysis
     setError(null);
+    setShowSuccessToast(false);
     logEvent('PREDICTION_START', `Analyzing ${mutation.wildtype}${mutation.position}${mutation.mutant} for ${currentProtein.id}`);
     try {
       const pred = await predictMutation(
@@ -161,12 +165,13 @@ const App: React.FC = () => {
         environment
       );
 
-      // Animation beat
       await new Promise(r => setTimeout(r, 800));
 
       setResult(pred);
       setDecisionMemo(memo);
       setIsRevealing(true);
+      setHasNewRoadmap(true);
+      setShowSuccessToast(true);
 
       const snapshots = viewerHandleRef.current?.getSnapshots();
       const newEntry: DecisionLogEntry = {
@@ -187,6 +192,14 @@ const App: React.FC = () => {
       };
       setLogEntries(prev => [newEntry, ...prev]);
       logEvent('PREDICTION_SUCCESS', `Analysis complete: ΔΔG ${pred.deltaDeltaG.toFixed(2)}`);
+      
+      // Auto-scroll to full-width results section
+      setTimeout(() => {
+        resultsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 500);
+
+      // Auto-hide toast
+      setTimeout(() => setShowSuccessToast(false), 8000);
 
     } catch (err: any) {
       setError(`Analysis Error: ${err.message || "Unknown error"}`);
@@ -196,10 +209,10 @@ const App: React.FC = () => {
     }
   };
 
-  const updateLogEntry = (id: string, updates: Partial<DecisionLogEntry>) => {
-    setLogEntries(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
-    if (updates.userNotes) logEvent('NOTE_UPDATE', `Modified user rationale for entry ${id}`);
-    if (updates.outcome) logEvent('OUTCOME_VERIFIED', `Entry ${id} marked as ${updates.outcome}`);
+  const scrollToResult = () => {
+    resultsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setShowSuccessToast(false);
+    setHasViewedResults(true);
   };
 
   const restoreLogContext = (entry: DecisionLogEntry) => {
@@ -210,15 +223,14 @@ const App: React.FC = () => {
     setResult(entry.prediction || null);
     setDecisionMemo(entry.memo || null);
     setIsRevealing(true);
+    setActiveTab('analysis');
     parseMutationString(entry.mutationTested);
-    logEvent('CONTEXT_RESTORE', `Restored workflow for ${entry.mutationTested}`);
   };
 
   const handleCustomSearch = async () => {
     if (!searchQuery) return;
     setIsSearching(true);
     setError(null);
-    logEvent('PROTEIN_SEARCH', `Resolving ${searchQuery}`);
     try {
       const data = await searchProtein(searchQuery);
       setCurrentProtein({ ...data, isValidatedReference: false });
@@ -232,7 +244,6 @@ const App: React.FC = () => {
   const loadReference = async (ref: ReferenceProtein) => {
     setIsSearching(true);
     setError(null);
-    logEvent('REF_LOAD', `Selected ${ref.name} (${ref.id})`);
     try {
       const data = await searchProtein(ref.id);
       setCurrentProtein({ 
@@ -249,169 +260,60 @@ const App: React.FC = () => {
     }
   };
 
-  const downloadPIReport = () => {
-    if (!result || !decisionMemo || !currentProtein) return;
-    logEvent('REPORT_EXPORT', `Generated comprehensive scientific memo`);
-    const snapshots = viewerHandleRef.current?.getSnapshots();
-    const { full, zoomed } = snapshots || { full: '', zoomed: '' };
-    
-    const sessionDuration = Math.round((new Date().getTime() - new Date(auditTrail.startTime).getTime()) / 60000);
-    const auditHtml = auditTrail.events.map(ev => `
-      <div style="font-size: 9px; font-family: 'JetBrains Mono', monospace; border-left: 2px solid #e2e8f0; padding-left: 10px; margin-bottom: 4px;">
-        <span style="color: #94a3b8;">[${new Date(ev.timestamp).toLocaleTimeString()}]</span>
-        <span style="color: #4f46e5; font-weight: 800;">${ev.feature}</span>: ${ev.details}
-      </div>
-    `).join('');
-
-    const recommendedHtml = decisionMemo.recommended.map(r => `
-      <div style="background: #ecfdf5; border: 1px solid #10b981; border-radius: 12px; padding: 15px; margin-bottom: 10px;">
-        <div style="font-weight: 900; color: #065f46; font-size: 14px;">#${r.rank} ${r.mutation}</div>
-        <div style="font-size: 11px; color: #047857; margin-top: 4px;"><strong>Rationale:</strong> ${r.rationale}</div>
-        <div style="font-size: 9px; font-weight: 800; color: #059669; text-transform: uppercase; margin-top: 6px;">Alignment: ${r.goalAlignment} | Risk: ${r.risk}</div>
-      </div>
-    `).join('');
-
-    const discouragedHtml = decisionMemo.discouraged.map(d => `
-      <div style="background: #fff1f2; border: 1px solid #f43f5e; border-radius: 12px; padding: 15px; margin-bottom: 10px;">
-        <div style="font-weight: 900; color: #9f1239; font-size: 14px;">${d.mutation}</div>
-        <div style="font-size: 11px; color: #be123c; margin-top: 4px;"><strong>Risk:</strong> ${d.risk}</div>
-        <div style="font-size: 9px; font-weight: 800; color: #e11d48; text-transform: uppercase; margin-top: 6px;">Signal: ${d.signal}</div>
-      </div>
-    `).join('');
-
-    const logsHtml = logEntries.map(entry => `
-      <div style="border: 1px solid #e2e8f0; border-radius: 16px; margin-bottom: 24px; padding: 24px; background: #fff; page-break-inside: avoid;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <div>
-             <h4 style="margin: 0; font-size: 16px; font-weight: 900; color: #0f172a;">${entry.mutationTested}</h4>
-             <p style="margin: 4px 0 0; font-size: 10px; font-weight: 700; color: #6366f1; text-transform: uppercase;">Outcome: ${entry.outcome}</p>
-          </div>
-          <span style="font-size: 10px; color: #94a3b8; font-weight: 600;">Captured ${new Date(entry.timestamp).toLocaleString()}</span>
-        </div>
-        <div style="padding: 15px; background: #fffbeb; border-radius: 12px; border: 1px solid #fef3c7;">
-          <h5 style="margin: 0 0 8px; font-size: 9px; font-weight: 900; color: #b45309; text-transform: uppercase;">Scientist Rationale & Notes</h5>
-          <p style="margin: 0; font-size: 12px; color: #92400e; line-height: 1.5; font-weight: 500;">${entry.userNotes || 'No notes documented.'}</p>
-        </div>
-      </div>
-    `).join('');
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>novasciences Report - ${result.reproducibility.runId}</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono&display=swap');
-          body { font-family: 'Inter', sans-serif; color: #1e293b; max-width: 900px; margin: 0 auto; padding: 60px; background: #f8fafc; }
-          .container { background: white; border-radius: 40px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.1); }
-          .header { background: #0f172a; color: white; padding: 80px 60px; position: relative; }
-          .header::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(to right, #6366f1, #a855f7); }
-          .section { padding: 60px; border-bottom: 1px solid #f1f5f9; }
-          .title { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.25em; margin-bottom: 30px; color: #4f46e5; }
-          .box { background: #f8fafc; padding: 35px; border-radius: 24px; font-size: 15px; border: 1px solid #e2e8f0; line-height: 1.7; font-weight: 500; }
-          .grid { display: grid; grid-template-cols: 1fr 1fr; gap: 30px; }
-          .snapshot { width: 100%; border-radius: 24px; border: 4px solid #f1f5f9; }
-          .stats-card { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1 style="margin:0; font-size: 42px; font-weight:900; text-transform:uppercase; letter-spacing: -0.04em; color: #fff;">novasciences</h1>
-            <p style="opacity:0.6; margin:12px 0 30px; font-size: 16px; font-weight: 600;">RUN_ID: ${result.reproducibility.runId} | SESSION: ${auditTrail.sessionId}</p>
-            <div style="display: grid; grid-template-cols: repeat(4, 1fr); gap: 15px;">
-              <div class="stats-card"><span style="display:block; font-size:9px; font-weight:900; opacity:0.5; margin-bottom:4px;">PROTEIN</span><span style="font-size:12px; font-weight:800;">${currentProtein.id}</span></div>
-              <div class="stats-card"><span style="display:block; font-size:9px; font-weight:900; opacity:0.5; margin-bottom:4px;">SESSION TIME</span><span style="font-size:12px; font-weight:800;">${sessionDuration}m</span></div>
-              <div class="stats-card"><span style="display:block; font-size:9px; font-weight:900; opacity:0.5; margin-bottom:4px;">LOG ENTRIES</span><span style="font-size:12px; font-weight:800;">${logEntries.length}</span></div>
-              <div class="stats-card"><span style="display:block; font-size:9px; font-weight:900; opacity:0.5; margin-bottom:4px;">SECURITY</span><span style="font-size:12px; font-weight:800;">ENCRYPTED</span></div>
-            </div>
-          </div>
-          <div class="section">
-            <div class="title">I. Executive Summary & Reasoning</div>
-            <div class="box">${decisionMemo.summary}</div>
-            <div style="margin-top:20px; font-size:13px; font-weight:700; color:#475569; padding: 20px; background: #eff6ff; border-radius: 16px;">
-              <strong>Synthesis Log Insight:</strong> ${decisionMemo.logInsights}
-            </div>
-          </div>
-          <div class="section">
-            <div class="title">II. Roadmap Exploration Guide</div>
-            <h4 style="font-size: 10px; font-weight: 900; color: #059669; text-transform: uppercase; margin-bottom: 15px;">RECOMMENDED TARGETS</h4>
-            ${recommendedHtml}
-            <h4 style="font-size: 10px; font-weight: 900; color: #e11d48; text-transform: uppercase; margin-top: 30px; margin-bottom: 15px;">DEPRIORITIZED / RISKY</h4>
-            ${discouragedHtml}
-          </div>
-          <div class="section">
-            <div class="title">III. Thermodynamic Profile</div>
-            <div class="grid">
-               <div class="box" style="border-left: 8px solid #6366f1;">
-                 <h4 style="margin:0 0 10px; font-size:12px; font-weight:900; color:#6366f1;">PREDICTED STABILITY</h4>
-                 <p style="margin:0; font-size: 24px; font-weight: 900; color: #0f172a;">ΔΔG: ${result.deltaDeltaG.toFixed(2)} kcal/mol</p>
-                 <p style="margin:4px 0 0; font-weight: 800; color: #6366f1; font-size: 14px;">${result.stabilityImpact}</p>
-               </div>
-               <div class="box">
-                 <h4 style="margin:0 0 10px; font-size:12px; font-weight:900; color:#10b981;">CONFIDENCE SCORE</h4>
-                 <p style="margin:0; font-size: 24px; font-weight: 900; color: #0f172a;">${(result.confidence * 100).toFixed(0)}%</p>
-               </div>
-            </div>
-            <div style="margin-top:30px;"><img src="${zoomed}" class="snapshot" /></div>
-          </div>
-          <div class="section" style="background: #f8fafc;">
-            <div class="title">IV. Historical Decision Logs</div>
-            <div style="margin-top: 20px;">
-               ${logsHtml || '<p style="text-align:center; opacity:0.5;">No decision logs recorded.</p>'}
-            </div>
-          </div>
-          <div class="section">
-            <div class="title">V. System Audit Trail</div>
-            <div style="background: #0f172a; padding: 30px; border-radius: 20px; color: #e2e8f0; font-family: 'JetBrains Mono', monospace;">
-               ${auditHtml}
-            </div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `NOVA_FULL_AUDIT_${result.reproducibility.runId}.html`;
-    a.click();
-  };
-
-  const clearSession = () => {
-    if (window.confirm("Scientist: This will permanently wipe local session persistence. Export your data first. Proceed?")) {
-      logEvent('SESSION_WIPE', 'User cleared all local persistence');
-      localStorage.removeItem(LOGS_KEY);
-      localStorage.removeItem(SESSION_KEY);
-      window.location.reload();
-    }
-  };
-
   return (
     <div className="min-h-screen pb-20 antialiased selection:bg-indigo-100">
-      <nav className="bg-[#0f172a] text-white sticky top-0 z-50 shadow-2xl px-6 py-4 border-b border-indigo-500/20">
+      <nav className="bg-[#0f172a] text-white sticky top-0 z-[60] shadow-2xl px-6 py-4 border-b border-indigo-500/20">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="bg-indigo-600 p-2 rounded-xl shadow-lg shadow-indigo-600/30"><i className="fa-solid fa-dna text-lg"></i></div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-black lowercase tracking-tight">novasciences <span className="text-indigo-400">0.2.5v</span></h1>
-              <span className="text-[8px] font-black uppercase opacity-40 tracking-widest -mt-1">Active Session: {auditTrail.sessionId}</span>
+              <h1 className="text-xl font-black lowercase tracking-tight text-white">novasciences <span className="text-indigo-400">0.2.5v</span></h1>
+              <span className="text-[8px] font-black uppercase opacity-40 tracking-widest -mt-1 text-white">Active Session: {auditTrail.sessionId}</span>
             </div>
           </div>
           <div className="flex gap-3">
-             <button onClick={clearSession} className="text-rose-400 hover:text-rose-300 text-[10px] font-black uppercase px-4 py-2 rounded-xl hover:bg-rose-500/10 transition-all">Reset Session</button>
+             <button onClick={() => window.location.reload()} className="text-rose-400 hover:text-rose-300 text-[10px] font-black uppercase px-4 py-2 rounded-xl hover:bg-rose-500/10 transition-all">Reset Session</button>
              {logEntries.length > 0 && (
-              <button onClick={downloadPIReport} className="bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg transition-all active:scale-95">
-                <i className="fa-solid fa-file-export"></i> Export Comprehensive Memo
+              <button className="bg-indigo-600 hover:bg-indigo-500 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase flex items-center gap-2 shadow-lg transition-all active:scale-95 text-white">
+                <i className="fa-solid fa-file-export"></i> Export Memo
               </button>
              )}
           </div>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 pt-10">
+      {/* Floating Indicator - Only shows if results ARE ready but NOT YET viewed */}
+      {result && !hasViewedResults && (
+        <button 
+          onClick={scrollToResult}
+          className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[70] bg-[#0f172a] text-white px-8 py-4 rounded-full shadow-2xl border-2 border-indigo-500 animate-bounce transition-all hover:scale-110 active:scale-95 flex items-center gap-3 group"
+        >
+          <i className="fa-solid fa-flask-vial text-indigo-400 group-hover:rotate-12 transition-transform"></i>
+          <span className="text-[10px] font-black uppercase tracking-widest">Active Analysis Data Below</span>
+          <i className="fa-solid fa-arrow-down animate-bounce"></i>
+        </button>
+      )}
+
+      {/* Success Notification */}
+      {showSuccessToast && result && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-500">
+           <div className="bg-indigo-600 text-white px-10 py-5 rounded-[2.5rem] shadow-[0_35px_60px_-15px_rgba(79,70,229,0.5)] border-4 border-white/20 flex items-center gap-8">
+              <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center text-3xl">
+                 <i className="fa-solid fa-check-double animate-bounce"></i>
+              </div>
+              <div className="flex flex-col">
+                 <h4 className="text-[16px] font-black uppercase tracking-[0.2em] mb-1">Simulation Complete</h4>
+                 <p className="text-[12px] font-bold opacity-90 tracking-wide">{result.mutation} data ready for inspection below.</p>
+              </div>
+              <button onClick={scrollToResult} className="bg-white text-indigo-600 px-8 py-3 rounded-2xl text-[11px] font-black uppercase hover:bg-indigo-50 transition-all shadow-xl active:scale-95 flex items-center gap-2">
+                Inspect Synthesis <i className="fa-solid fa-arrow-down"></i>
+              </button>
+              <button onClick={() => setShowSuccessToast(false)} className="opacity-40 hover:opacity-100 transition-opacity"><i className="fa-solid fa-xmark text-xl"></i></button>
+           </div>
+        </div>
+      )}
+
+      <main className="max-w-7xl mx-auto px-6 pt-10 space-y-20">
         {!currentProtein && !isSearching && (
           <div className="max-w-5xl mx-auto space-y-16 animate-in fade-in slide-in-from-bottom-4">
             <div className="text-center">
@@ -429,7 +331,7 @@ const App: React.FC = () => {
             </div>
             <div className="pt-10 border-t-2 border-slate-100 flex flex-col items-center">
                <div className="flex w-full max-w-md gap-3">
-                 <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="UniProt ID (e.g. P04637)..." className="flex-1 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner" />
+                 <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="UniProt ID..." className="flex-1 bg-white border-2 border-slate-200 py-4 px-6 rounded-2xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-inner" />
                  <button onClick={handleCustomSearch} className="bg-slate-900 text-white px-8 rounded-2xl font-black text-[10px] uppercase hover:bg-indigo-600 shadow-lg transition-all">Resolve System</button>
                </div>
             </div>
@@ -437,133 +339,142 @@ const App: React.FC = () => {
         )}
 
         {currentProtein && !isSearching && (
-          <div className="space-y-10">
-            <div className="flex items-center justify-between">
-              <button onClick={() => setCurrentProtein(null)} className="text-[10px] font-black uppercase text-slate-900 hover:text-indigo-600 flex items-center gap-2"><i className="fa-solid fa-arrow-left"></i> Systems Gallery</button>
-              <div className="flex gap-2">
+          <>
+            <div className="space-y-10">
+              <div className="flex items-center justify-between">
+                <button onClick={() => setCurrentProtein(null)} className="text-[10px] font-black uppercase text-slate-900 hover:text-indigo-600 flex items-center gap-2"><i className="fa-solid fa-arrow-left"></i> Systems Gallery</button>
                 <div className="bg-indigo-100 text-indigo-800 border-2 border-indigo-200 px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-sm">
                   {currentProtein.name} | {currentProtein.id}
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-              <div className="lg:col-span-4 space-y-6">
-                <div className="bg-white rounded-[2.5rem] border-2 border-slate-100 p-8 shadow-lg space-y-8">
-                  <section>
-                    <h4 className="text-[11px] font-black text-slate-900 uppercase mb-4 tracking-widest border-b-2 border-indigo-500 pb-2 inline-block">Analysis Environment</h4>
-                    <div className="space-y-5">
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Scientific Objective</label>
-                        <select 
-                          value={goal} 
-                          onChange={(e) => setGoal(e.target.value as ScientificGoal)} 
-                          className="w-full bg-slate-50 border-2 border-slate-100 py-3 px-4 rounded-xl text-xs font-black text-slate-900 outline-none focus:border-indigo-500 transition-all"
-                        >
-                          {Object.values(ScientificGoal).map(g => <option key={g} value={g}>{g}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Preservation Constraint</label>
-                        <input 
-                          type="text" 
-                          value={preserveRegions} 
-                          onChange={(e) => setPreserveRegions(e.target.value)} 
-                          placeholder="e.g. 100-120, Active Site" 
-                          className={`w-full bg-slate-50 border-2 py-3 px-4 rounded-xl text-xs font-black text-slate-900 outline-none transition-all ${warning ? 'border-rose-400' : 'border-slate-100'}`} 
-                        />
-                        {warning && <p className="text-[9px] text-rose-600 font-black uppercase mt-1 animate-pulse">{warning}</p>}
-                      </div>
-                      <div>
-                        <div className="flex justify-between items-center mb-2">
-                           <label className="block text-[10px] font-black text-slate-400 uppercase">Experiment Context</label>
-                           <div className="flex gap-1">
-                              {EXPERIMENTAL_PRESETS.map(p => (
-                                <button key={p.name} onClick={() => setEnvironment(p.values)} className="text-[7px] font-black bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase text-slate-500">
-                                  {p.name}
-                                </button>
-                              ))}
-                           </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                <div className="lg:col-span-4 space-y-6">
+                  <div className="bg-white rounded-[2.5rem] border-2 border-slate-100 p-8 shadow-lg space-y-6">
+                    <section>
+                      <h4 className="text-[11px] font-black text-slate-900 uppercase mb-4 border-b-2 border-indigo-500 pb-2 inline-block tracking-widest">Environment</h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Objective</label>
+                          <select value={goal} onChange={(e) => setGoal(e.target.value as ScientificGoal)} className="w-full bg-slate-50 border-2 border-slate-100 py-3 px-4 rounded-xl text-xs font-black outline-none focus:border-indigo-500 text-slate-900">
+                            {Object.values(ScientificGoal).map(g => <option key={g} value={g}>{g}</option>)}
+                          </select>
                         </div>
-                        <textarea 
-                          value={environment} 
-                          onChange={(e) => setEnvironment(e.target.value)} 
-                          placeholder="Standard physiological conditions..." 
-                          className="w-full bg-slate-50 border-2 border-slate-100 py-3 px-4 rounded-xl text-xs font-black text-slate-900 min-h-[80px]" 
-                        />
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Preservation</label>
+                          <input type="text" value={preserveRegions} onChange={(e) => setPreserveRegions(e.target.value)} placeholder="e.g. 100-120" className="w-full bg-slate-50 border-2 border-slate-100 py-3 px-4 rounded-xl text-xs font-black outline-none text-slate-900" />
+                        </div>
                       </div>
-                    </div>
-                  </section>
-                  <section className="pt-4 border-t-2 border-slate-50">
-                    <h4 className="text-[11px] font-black text-slate-900 uppercase mb-4 tracking-widest border-b-2 border-rose-500 pb-2 inline-block">Mutation Identity</h4>
-                    <div className="grid grid-cols-3 gap-3 mb-6">
-                       <input type="text" value={mutation.wildtype} onChange={(e) => setMutation({...mutation, wildtype: e.target.value.toUpperCase()})} className="w-full bg-slate-50 border-2 border-slate-100 py-3 rounded-xl text-center text-xs font-black" placeholder="WT" />
-                       <input type="number" value={mutation.position} onChange={(e) => setMutation({...mutation, position: parseInt(e.target.value) || 1})} className="w-full bg-slate-50 border-2 border-slate-100 py-3 rounded-xl text-center text-xs font-black" />
-                       <input type="text" value={mutation.mutant} onChange={(e) => setMutation({...mutation, mutant: e.target.value.toUpperCase()})} className="w-full bg-slate-50 border-2 border-slate-100 py-3 rounded-xl text-center text-xs font-black" placeholder="MUT" />
-                    </div>
-                    <button 
-                      onClick={handlePredict} 
-                      disabled={isPredicting || !!warning} 
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white py-4 rounded-2xl font-black text-sm shadow-xl transition-all"
-                    >
-                      {isPredicting ? <i className="fa-solid fa-microchip fa-spin"></i> : <><i className="fa-solid fa-bolt"></i> Synthesize Analysis</>}
-                    </button>
-                  </section>
-                </div>
-                <div className="bg-white rounded-[2.5rem] border-2 border-slate-100 p-8 shadow-lg max-h-[600px] overflow-y-auto custom-scrollbar">
-                  <DecisionLog entries={logEntries} onUpdateEntry={updateLogEntry} onRestore={restoreLogContext} />
-                </div>
-              </div>
-
-              <div className="lg:col-span-8 space-y-10">
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-10 items-stretch">
-                  <div className="xl:col-span-7">
-                    <ProteinViewer ref={viewerHandleRef} uniprotId={currentProtein.id} pdbId={currentProtein.pdbId} mutation={mutation} />
+                    </section>
+                    <section className="pt-4 border-t-2 border-slate-50">
+                      <h4 className="text-[11px] font-black text-slate-900 uppercase mb-4 border-b-2 border-rose-500 pb-2 inline-block tracking-widest">Target</h4>
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                         <input type="text" value={mutation.wildtype} onChange={(e) => setMutation({...mutation, wildtype: e.target.value.toUpperCase()})} className="w-full bg-slate-50 border-2 border-slate-100 py-3 rounded-xl text-center text-xs font-black text-slate-900" placeholder="WT" />
+                         <input type="number" value={mutation.position} onChange={(e) => setMutation({...mutation, position: parseInt(e.target.value) || 1})} className="w-full bg-slate-50 border-2 border-slate-100 py-3 rounded-xl text-center text-xs font-black text-slate-900" />
+                         <input type="text" value={mutation.mutant} onChange={(e) => setMutation({...mutation, mutant: e.target.value.toUpperCase()})} className="w-full bg-slate-50 border-2 border-slate-100 py-3 rounded-xl text-center text-xs font-black text-slate-900" placeholder="MUT" />
+                      </div>
+                      <button onClick={handlePredict} disabled={isPredicting} className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white py-5 rounded-2xl font-black text-[11px] uppercase shadow-xl transition-all flex items-center justify-center gap-3">
+                        {isPredicting ? <><i className="fa-solid fa-microchip fa-spin"></i> Analyzing...</> : <><i className="fa-solid fa-bolt"></i> Synthesize Analysis</>}
+                      </button>
+                    </section>
                   </div>
-                  <div className={`xl:col-span-5 flex flex-col gap-6 ${isRevealing ? 'reveal-active' : ''}`}>
-                    {result ? <MutationCard result={result} /> : (
-                      <div className="flex-1 bg-white border-4 border-dashed border-slate-100 rounded-[2.5rem] flex flex-col items-center justify-center p-12 text-center text-slate-300">
-                        {isPredicting ? (
-                          <div className="loading-pulse">
-                            <i className="fa-solid fa-microscope text-5xl mb-6 text-indigo-400"></i>
-                            <h4 className="text-[12px] font-black uppercase text-indigo-600">Simulating Dynamics...</h4>
-                          </div>
-                        ) : (
-                          <>
-                            <i className="fa-solid fa-robot text-5xl mb-6 opacity-50"></i>
-                            <h4 className="text-[12px] font-black uppercase tracking-widest mb-2">Engine Disengaged</h4>
-                            <p className="text-[10px] font-bold max-w-[200px] leading-relaxed text-slate-400">Specify a mutation identity to initialize the decision loop.</p>
-                          </>
-                        )}
+                  <div className="bg-white rounded-[2.5rem] border-2 border-slate-100 p-8 shadow-lg max-h-[500px] overflow-y-auto custom-scrollbar">
+                    <DecisionLog entries={logEntries} onUpdateEntry={() => {}} onRestore={restoreLogContext} />
+                  </div>
+                </div>
+
+                <div className="lg:col-span-8 space-y-6">
+                  <div className="relative">
+                    <ProteinViewer 
+                      ref={viewerHandleRef} 
+                      uniprotId={currentProtein.id} 
+                      pdbId={currentProtein.pdbId} 
+                      mutation={mutation} 
+                      showIdealizedMutant={showIdealizedMutant}
+                    />
+                    <div className="absolute top-8 left-8 z-20 flex items-center gap-4 bg-[#0f172a]/90 backdrop-blur-xl px-6 py-3 rounded-3xl border border-white/10 shadow-2xl">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" checked={showIdealizedMutant} onChange={(e) => setShowIdealizedMutant(e.target.checked)} />
+                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
+                      </label>
+                      <span className="text-[10px] font-black text-white uppercase tracking-widest">Show idealized mutant side chain</span>
+                    </div>
+
+                    {/* Quick navigation anchor when result exists and NOT YET viewed */}
+                    {result && !isPredicting && !hasViewedResults && (
+                      <div className="absolute bottom-8 right-8 animate-in slide-in-from-right-4">
+                        <button 
+                          onClick={scrollToResult}
+                          className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase shadow-2xl flex items-center gap-2 hover:bg-indigo-700 transition-all active:scale-95"
+                        >
+                          View {mutation.wildtype}{mutation.position}{mutation.mutant} Data <i className="fa-solid fa-arrow-down"></i>
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {decisionMemo && (
-                  <div className={isRevealing ? 'reveal-active' : ''}>
-                    <DecisionMemo memo={decisionMemo} goal={goal} onSelectMutation={parseMutationString} />
+            {/* FULL-WIDTH RESULTS SECTION */}
+            <div ref={resultsContainerRef} className="pt-20 border-t-8 border-slate-100 scroll-mt-24">
+              {/* STICKY TAB NAVIGATOR */}
+              <div className="sticky top-[72px] z-50 py-4 bg-[#fcfdfe]/80 backdrop-blur-md">
+                <div className="flex bg-white rounded-[2rem] p-2 border-2 border-slate-100 shadow-2xl gap-2 w-full max-w-2xl mx-auto">
+                  <button onClick={() => setActiveTab('analysis')} className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${activeTab === 'analysis' ? 'bg-[#0f172a] text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <i className="fa-solid fa-atom"></i> Atomic Simulation
+                  </button>
+                  <button onClick={() => { setActiveTab('roadmap'); setHasNewRoadmap(false); }} className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] transition-all relative flex items-center justify-center gap-3 ${activeTab === 'roadmap' ? 'bg-[#0f172a] text-white shadow-xl' : 'text-slate-400 hover:bg-slate-50'}`}>
+                    <i className="fa-solid fa-map-location-dot"></i> Strategic Roadmap {hasNewRoadmap && <span className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full animate-pulse shadow-md border-2 border-white"></span>}
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full min-h-[400px]">
+                {activeTab === 'analysis' ? (
+                  <div className={`transition-all duration-700 ${isRevealing ? 'reveal-active opacity-100' : 'opacity-0'}`}>
+                    {result ? <MutationCard result={result} /> : (
+                      <div className="h-80 bg-white border-4 border-dashed border-slate-100 rounded-[3.5rem] flex flex-col items-center justify-center text-slate-300">
+                        {isPredicting ? (
+                          <div className="animate-pulse flex flex-col items-center gap-6">
+                            <i className="fa-solid fa-dna text-6xl text-indigo-400"></i>
+                            <span className="text-[14px] font-black uppercase tracking-[0.4em] text-indigo-900">Mapping atomic coordinates...</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-6">
+                            <i className="fa-solid fa-robot text-7xl mb-2 opacity-10"></i>
+                            <span className="text-[14px] font-black uppercase tracking-[0.4em] text-slate-400">Analysis results manifest here upon synthesis</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+                    {decisionMemo ? <DecisionMemo memo={decisionMemo} goal={goal} onSelectMutation={parseMutationString} /> : (
+                      <div className="h-80 bg-white border-4 border-dashed border-slate-100 rounded-[3.5rem] flex flex-col items-center justify-center text-slate-300">
+                        <span className="text-[14px] font-black uppercase tracking-[0.4em] text-slate-400">Strategic Roadmap Pending Data...</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
-          </div>
+          </>
         )}
 
         {isSearching && (
           <div className="h-96 flex flex-col items-center justify-center space-y-6">
-            <div className="relative">
-              <div className="w-20 h-20 border-4 border-indigo-500/10 border-t-indigo-600 rounded-full animate-spin"></div>
-            </div>
-            <p className="text-[12px] font-black text-slate-900 uppercase tracking-widest animate-pulse">Resolving Atomic Identity...</p>
+            <div className="w-20 h-20 border-4 border-indigo-500/10 border-t-indigo-600 rounded-full animate-spin"></div>
+            <p className="text-[12px] font-black text-slate-900 uppercase tracking-[0.4em] animate-pulse">Resolving molecular identity...</p>
           </div>
         )}
 
         {error && (
-          <div className="fixed bottom-10 right-10 bg-slate-900 text-white px-8 py-5 rounded-[2rem] shadow-2xl flex items-center gap-4 z-50 border-2 border-indigo-500 animate-slide-in">
-             <i className="fa-solid fa-terminal text-rose-500"></i>
-             <div className="text-[11px] font-bold uppercase">{error}</div>
-             <button onClick={() => setError(null)} className="ml-4"><i className="fa-solid fa-xmark"></i></button>
+          <div className="fixed bottom-12 right-12 bg-slate-950 text-white px-10 py-6 rounded-[2.5rem] shadow-2xl flex items-center gap-6 z-[110] border-4 border-rose-500 animate-slide-in">
+             <i className="fa-solid fa-terminal text-rose-500 text-2xl"></i>
+             <div className="text-[12px] font-black uppercase tracking-wide leading-tight">{error}</div>
+             <button onClick={() => setError(null)} className="ml-6 opacity-40 hover:opacity-100 transition-opacity text-white text-xl"><i className="fa-solid fa-xmark"></i></button>
           </div>
         )}
       </main>

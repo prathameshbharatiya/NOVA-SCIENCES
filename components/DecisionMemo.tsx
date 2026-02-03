@@ -8,16 +8,20 @@ interface DecisionMemoProps {
 }
 
 const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal, onSelectMutation }) => {
+  const isReference = memo.confidenceMode === 'Validated Reference Mode';
+
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-700 w-full">
       {/* FULL-WIDTH ROADMAP COMMAND STRIP */}
-      <div className="bg-[#0f172a] text-white rounded-[3rem] shadow-[0_40px_80px_-15px_rgba(15,23,42,0.5)] border-b-[8px] border-indigo-600/50 overflow-hidden animate-pulse-once">
+      <div className={`bg-[#0f172a] text-white rounded-[3rem] shadow-[0_40px_80px_-15px_rgba(15,23,42,0.5)] border-b-[8px] overflow-hidden animate-pulse-once ${isReference ? 'border-indigo-600/50' : 'border-amber-600/50'}`}>
         <div className="grid grid-cols-1 lg:grid-cols-12 items-stretch divide-x divide-white/10">
           
           {/* Identity & Mission */}
           <div className="lg:col-span-4 p-10 flex flex-col justify-center bg-slate-900/80">
             <div className="flex items-center gap-3 mb-4">
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-lg border border-indigo-500/20">Roadmap Active</span>
+              <span className={`text-[10px] font-black uppercase tracking-[0.3em] px-3 py-1 rounded-lg border ${isReference ? 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20' : 'text-amber-400 bg-amber-500/10 border-amber-500/20'}`}>
+                {memo.confidenceMode}
+              </span>
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">NOVA-STRATEGY-V0.2.5</span>
             </div>
             <h3 className="text-5xl font-black tracking-tighter text-white leading-none mb-4 uppercase">{goal}</h3>
@@ -62,9 +66,9 @@ const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal, onSelectMutatio
         <section>
           <div className="flex items-center justify-between mb-8 px-4">
              <h3 className="text-[14px] font-black text-emerald-600 uppercase tracking-[0.4em] flex items-center gap-3">
-                <i className="fa-solid fa-vial-circle-check text-2xl"></i> High-Probability Recommendations
+                <i className="fa-solid fa-vial-circle-check text-2xl"></i> Defensibility-Prioritized Targets
              </h3>
-             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Click card to simulate target</span>
+             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Click to simulate with anchors</span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -72,29 +76,28 @@ const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal, onSelectMutatio
               <div 
                 key={rec.rank} 
                 onClick={() => onSelectMutation?.(rec.mutation)}
-                className="bg-white border-2 border-slate-100 p-8 rounded-[3.5rem] relative cursor-pointer hover:border-emerald-500 hover:shadow-[0_20px_50px_-15px_rgba(16,185,129,0.2)] transition-all group flex flex-col min-h-[320px]"
+                className="bg-white border-2 border-slate-100 p-8 rounded-[3.5rem] relative cursor-pointer hover:border-emerald-500 hover:shadow-[0_20px_50px_-15px_rgba(16,185,129,0.2)] transition-all group flex flex-col min-h-[360px]"
               >
-                <div className="absolute top-6 right-8 text-emerald-100 font-black text-6xl opacity-50 italic group-hover:text-emerald-200 transition-colors">#{rec.rank}</div>
-                <h4 className="text-5xl font-black text-slate-900 mb-4 tracking-tighter">{rec.mutation}</h4>
+                <div className="absolute top-6 right-8 text-emerald-100 font-black text-6xl opacity-30 italic group-hover:text-emerald-200 transition-colors">#{rec.rank}</div>
+                <h4 className="text-5xl font-black text-slate-900 mb-2 tracking-tighter">{rec.mutation}</h4>
                 
                 <div className="flex flex-col gap-4 flex-1">
-                  <div className="flex gap-2">
-                    <span className="bg-emerald-600 text-white text-[10px] font-black px-3 py-1 rounded-lg uppercase tracking-widest">{rec.goalAlignment} Alignment</span>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest">{rec.goalAlignment}</span>
+                    <span className="bg-slate-900 text-white text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest">{rec.regime}</span>
                   </div>
 
                   <p className="text-[14px] text-slate-700 leading-relaxed font-bold italic mb-2">"{rec.rationale}"</p>
                   
-                  {/* Detailed Confidence Reasoning */}
-                  <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 mt-auto">
-                     <div className="flex justify-between items-center mb-2">
-                       <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Synthesis Confidence: {rec.confidenceBreakdown?.overallConfidence || rec.confidence}</span>
+                  {/* Pattern Anchors Preview */}
+                  {rec.patternAnchors && rec.patternAnchors.length > 0 && (
+                     <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                        <span className="text-[8px] font-black uppercase text-indigo-600 block mb-1">Empirical Precedent</span>
+                        <p className="text-[10px] text-indigo-900 font-bold leading-tight">{rec.patternAnchors[0]}</p>
                      </div>
-                     <p className="text-[11px] text-emerald-800 font-bold leading-tight">
-                       {rec.confidenceBreakdown?.confidenceRationale}
-                     </p>
-                  </div>
+                  )}
 
-                  <div className="flex items-center gap-2 text-rose-500 px-1">
+                  <div className="flex items-center gap-2 text-rose-500 px-1 mt-auto">
                     <i className="fa-solid fa-triangle-exclamation text-[10px]"></i>
                     <span className="text-[10px] font-black uppercase tracking-widest">{rec.risk}</span>
                   </div>
@@ -135,9 +138,7 @@ const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal, onSelectMutatio
       {/* FOOTER ALERT */}
       <div className="p-8 bg-slate-950 rounded-[3rem] border border-white/10 text-center shadow-inner">
         <p className="text-[12px] font-black text-rose-400 uppercase tracking-[0.25em] leading-relaxed max-w-4xl mx-auto">
-          <i className="fa-solid fa-map-location-dot mr-3 text-lg"></i> 
-          The Strategic Roadmap identifies potential targets based on learned patterns and comparative analysis. 
-          Each recommendation requires individual atomic simulation and subsequent laboratory benchmarking.
+          Confidence reflects decision defensibility based on empirical pattern anchoring and regime awareness. Laboratory validation is always required.
         </p>
       </div>
     </div>

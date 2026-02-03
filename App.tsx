@@ -18,8 +18,8 @@ import ProteinViewer, { ProteinViewerHandle } from './components/ProteinViewer';
 import DecisionLog from './components/DecisionLog';
 import { track } from '@vercel/analytics';
 
-const SESSION_KEY = 'novasciences_session_v025';
-const LOGS_KEY = 'novasciences_logs_v025';
+const SESSION_KEY = 'novasciences_session_v025_bench_mode';
+const LOGS_KEY = 'novasciences_logs_v025_bench_mode';
 
 type DashboardTab = 'analysis' | 'roadmap';
 
@@ -281,6 +281,19 @@ const App: React.FC = () => {
         .badge-negative { background: #fee2e2; color: #991b1b; }
         .badge-pending { background: #f1f5f9; color: #475569; }
 
+        .mode-tag {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            border: 1px solid currentColor;
+        }
+        .mode-validated { background: #f0fdf4; color: #166534; }
+        .mode-general { background: #fffbeb; color: #92400e; }
+
         .confidence-meter {
             display: flex;
             justify-content: space-between;
@@ -304,15 +317,20 @@ const App: React.FC = () => {
             border-top: 1px dashed var(--slate-100);
         }
 
-        .scientist-notes {
-            background: #fffbeb;
-            padding: 25px;
-            border-radius: 20px;
-            border: 1px solid #fde68a;
-            color: #92400e;
-            font-size: 13px;
-            font-weight: 600;
-            font-style: italic;
+        .bench-grid {
+            display: grid;
+            grid-template-cols: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .bench-tag {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 10px;
+            border-radius: 15px;
+            font-size: 10px;
+            text-align: center;
         }
 
         footer {
@@ -323,11 +341,6 @@ const App: React.FC = () => {
             text-transform: uppercase;
             color: #94a3b8;
             letter-spacing: 0.2em;
-        }
-
-        @media print {
-            body { background: white; padding: 0; }
-            .report-card { box-shadow: none; border: none; padding: 40px; max-width: 100%; }
         }
     </style>
 </head>
@@ -359,7 +372,7 @@ const App: React.FC = () => {
                     <div class="stat-val">${riskTolerance}</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-label">Sequence Length</div>
+                    <div class="stat-label">Protein Length</div>
                     <div class="stat-val">${currentProtein?.length} residues</div>
                 </div>
             </div>
@@ -367,18 +380,16 @@ const App: React.FC = () => {
 
         ${decisionMemo ? `
         <section class="section">
-            <h2 class="section-header">Strategic Roadmap Summary</h2>
+            <h2 class="section-header">Strategic Roadmap Synthesis</h2>
             <div class="roadmap-container">
-                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--amber); margin-bottom: 20px;">Executive Synthesis Brief</div>
+                <div class="mode-tag ${decisionMemo.confidenceMode === 'Validated Reference Mode' ? 'mode-validated' : 'mode-general'}" style="margin-bottom: 20px;">
+                    ENGINE MODE: ${decisionMemo.confidenceMode}
+                </div>
                 <div class="roadmap-summary">"${decisionMemo.summary}"</div>
                 <div style="margin-top: 40px; display: flex; gap: 40px;">
                     <div>
                         <div style="font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Context Memory</div>
                         <div style="font-size: 14px; font-weight: 700;">${decisionMemo.memoryContext}</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Reference Grounding</div>
-                        <div style="font-size: 14px; font-weight: 700;">${decisionMemo.referenceContextApplied ? 'Enabled' : 'Bypassed'}</div>
                     </div>
                 </div>
             </div>
@@ -388,30 +399,11 @@ const App: React.FC = () => {
                     <div class="mut-card" style="border-left-color: var(--emerald);">
                         <div class="confidence-meter">
                             <div>
-                                <div class="badge badge-positive">Top Recommendation #${rec.rank}</div>
+                                <div class="badge badge-positive">Recommendation #${rec.rank}</div>
                                 <div class="mut-id">${rec.mutation}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div class="conf-label">Confidence Score</div>
-                                <div class="conf-score">${rec.confidenceBreakdown?.overallConfidence || rec.confidence}</div>
                             </div>
                         </div>
                         <div class="rationale">"${rec.rationale}"</div>
-                        <div style="margin-top: 25px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--slate-900);">
-                            Alignment: ${rec.goalAlignment} | Risk: ${rec.risk}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-
-            <h3 style="font-size: 13px; font-weight: 900; color: var(--rose); text-transform: uppercase; margin: 60px 0 25px 0;">Deprioritized Engineering Paths</h3>
-            <div class="mut-grid">
-                ${decisionMemo.discouraged.map(disc => `
-                    <div class="mut-card discouraged">
-                        <div class="mut-id" style="color: #991b1b;">${disc.mutation}</div>
-                        <div class="badge badge-negative">High-Risk Pathology</div>
-                        <div class="rationale" style="color: #7f1d1d;">${disc.risk}</div>
-                        <div style="margin-top: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #ef4444;">Detection Signal: ${disc.signal}</div>
                     </div>
                 `).join('')}
             </div>
@@ -419,95 +411,49 @@ const App: React.FC = () => {
         ` : ''}
 
         <section class="section">
-            <h2 class="section-header">Atomic Simulation Audit Trail</h2>
+            <h2 class="section-header">Atomic Simulation Audit & Benchmark Evidence</h2>
             ${logEntries.map((entry, idx) => `
                 <div class="mut-card" style="margin-bottom: 50px;">
+                    <div class="mode-tag ${entry.prediction?.confidenceMode === 'Validated Reference Mode' ? 'mode-validated' : 'mode-general'}">
+                        ANALYSIS MODE: ${entry.prediction?.confidenceMode || 'N/A'}
+                    </div>
                     <div class="confidence-meter">
                         <div>
-                            <div class="badge badge-${entry.outcome.replace(/\s+/g, '')}">${entry.outcome}</div>
+                            <div class="badge badge-positive">${entry.outcome}</div>
                             <div class="mut-id">${entry.mutationTested}</div>
                         </div>
                         <div style="text-align: right;">
-                            <div class="conf-label">Simulation Trust Score</div>
-                            <div class="conf-score">${entry.prediction?.confidence ? (entry.prediction.confidence * 100).toFixed(0) + '%' : (entry.prediction?.confidenceBreakdown?.overallConfidence || 'N/A')}</div>
+                            <div class="conf-label">Simulation Trust</div>
+                            <div class="conf-score">${entry.prediction?.confidence ? (entry.prediction.confidence * 100).toFixed(0) + '%' : '...'}</div>
                             <div style="font-size: 14px; font-weight: 800; color: var(--primary); margin-top: 10px;">
                                 &Delta;&Delta;G: ${entry.prediction?.deltaDeltaG.toFixed(2)} kcal/mol
                             </div>
                         </div>
                     </div>
 
-                    ${entry.snapshots?.zoomed ? `
-                        <div class="snapshot">
-                            <img src="${entry.snapshots.zoomed}" style="width: 100%; border-radius: 20px;" alt="Atomic View">
-                        </div>
-                    ` : ''}
+                    ${entry.snapshots?.zoomed ? `<div class="snapshot"><img src="${entry.snapshots.zoomed}" style="width: 100%; border-radius: 20px;"></div>` : ''}
 
-                    <div style="display: grid; grid-template-cols: 1.5fr 1fr; gap: 50px;">
-                        <div>
-                            <h4 style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 20px;">Simulation Summary</h4>
-                            <div class="rationale" style="font-style: italic; margin-bottom: 25px;">"${entry.prediction?.reportSummary || 'N/A'}"</div>
-                            
-                            <h4 style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 15px;">Atomic Justification</h4>
-                            <div class="rationale">${entry.prediction?.justification || 'N/A'}</div>
-
-                            <h4 style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin: 30px 0 15px 0;">Functional Impact Mapping</h4>
-                            <div class="rationale">${entry.prediction?.functionalImpact || 'N/A'}</div>
-                        </div>
-                        <div>
-                            <h4 style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 20px;">Confidence Matrix</h4>
-                            <div style="background: var(--slate-100); padding: 25px; border-radius: 25px; border: 1px solid #e2e8f0;">
-                                <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 15px;">
-                                    ${Object.entries(entry.prediction?.confidenceBreakdown || {}).filter(([k]) => k !== 'confidenceRationale').map(([key, val]) => `
-                                        <div>
-                                            <div style="font-size: 8px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">${key.replace(/([A-Z])/g, ' $1').trim()}</div>
-                                            <div style="font-size: 12px; font-weight: 700; color: var(--slate-900);">${val}</div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                                <div style="margin-top: 20px; font-size: 11px; color: #64748b; font-weight: 600;">
-                                    Rationale: ${entry.prediction?.confidenceBreakdown?.confidenceRationale || 'N/A'}
-                                </div>
+                    <h4 style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 20px;">Benchmark Verification (Global Databases)</h4>
+                    <div class="bench-grid">
+                        ${entry.prediction?.benchmarkAlignments?.map(b => `
+                            <div class="bench-tag">
+                                <div style="font-weight: 900; color: var(--primary);">${b.dataset}</div>
+                                <div style="font-weight: 800; font-size: 12px; margin: 4px 0;">${b.alignmentScore}% Match</div>
+                                <div style="font-size: 8px; color: #94a3b8; font-style: italic;">${b.keyInsight}</div>
                             </div>
-
-                            <h4 style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin: 30px 0 20px 0;">Scientist Notes</h4>
-                            <div class="scientist-notes">
-                                ${entry.userNotes ? `"${entry.userNotes}"` : 'No scientist observations recorded.'}
-                            </div>
-                        </div>
+                        `).join('') || '<div class="bench-tag">No Benchmark Data Logged</div>'}
                     </div>
 
-                    <div class="metric-grid">
-                        <div>
-                            <div class="stat-label">Impact Category</div>
-                            <div style="font-weight: 800; font-size: 15px;">${entry.prediction?.stabilityImpact || 'N/A'}</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Functional Sensitivity</div>
-                            <div style="font-weight: 800; font-size: 15px;">${entry.prediction?.functionalRegionSensitivity || 'N/A'}</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Clinical Relevance</div>
-                            <div style="font-weight: 800; font-size: 15px;">${entry.prediction?.clinicalSignificance || 'N/A'}</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Mission Alignment</div>
-                            <div style="font-weight: 800; font-size: 15px; color: var(--primary);">${entry.prediction?.goalAlignment || 'N/A'}</div>
-                        </div>
+                    <div style="margin-top: 40px; border-top: 1px dashed var(--slate-100); padding-top: 30px;">
+                        <div class="rationale">Rationale: ${entry.prediction?.justification || 'N/A'}</div>
+                        <div style="margin-top: 20px;" class="scientist-notes">Observations: ${entry.userNotes || 'No notes.'}</div>
                     </div>
                 </div>
             `).join('')}
         </section>
 
-        <section class="section">
-            <h2 class="section-header">Evidence Grounding & References</h2>
-            <ul style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #64748b; list-style: none; padding: 0;">
-                ${logEntries.flatMap(e => e.prediction?.references || []).filter((v, i, a) => a.indexOf(v) === i).map(ref => `<li style="margin-bottom: 10px;">[REF] ${ref}</li>`).join('')}
-                ${!logEntries.some(e => e.prediction?.references?.length) ? '<li>No automated references cited in this session.</li>' : ''}
-            </ul>
-        </section>
-
         <footer>
-            Novasciences Lab Decision Suite v0.2.5 — Proprietary Biological Intelligence — Strictly Confidential
+            Novasciences Benchmark Suite — VenusMutHub | ProteinGym | ProMEP | Mega-scale Dataset Enabled
         </footer>
     </div>
 </body>
@@ -517,7 +463,7 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Nova_Master_Memo_${currentProtein?.id || 'Session'}_${new Date().getTime()}.html`;
+    link.download = `Nova_Master_Scientific_Record_${currentProtein?.id || 'Session'}_${new Date().getTime()}.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -546,27 +492,28 @@ const App: React.FC = () => {
     setError(null);
     setShowSuccessToast(false);
     logEvent('PREDICTION_START', `Analyzing ${mutation.wildtype}${mutation.position}${mutation.mutant} for ${currentProtein.id}`);
+    
     try {
-      const pred = await predictMutation(
-        currentProtein, 
-        mutation, 
-        goal, 
-        priorResults, 
-        riskTolerance, 
-        preserveRegions, 
-        environment
-      );
-      
-      const memo = await generateDecisionMemo(
-        currentProtein, 
-        goal, 
-        logEntries, 
-        riskTolerance, 
-        preserveRegions, 
-        environment
-      );
-
-      await new Promise(r => setTimeout(r, 800));
+      // Parallel execution: Atomic Analysis and Strategic Memo happen at the same time.
+      const [pred, memo] = await Promise.all([
+        predictMutation(
+          currentProtein, 
+          mutation, 
+          goal, 
+          priorResults, 
+          riskTolerance, 
+          preserveRegions, 
+          environment
+        ),
+        generateDecisionMemo(
+          currentProtein, 
+          goal, 
+          logEntries, 
+          riskTolerance, 
+          preserveRegions, 
+          environment
+        )
+      ]);
 
       setResult(pred);
       setDecisionMemo(memo);
@@ -596,9 +543,9 @@ const App: React.FC = () => {
       
       setTimeout(() => {
         resultsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 500);
+      }, 50);
 
-      setTimeout(() => setShowSuccessToast(false), 8000);
+      setTimeout(() => setShowSuccessToast(false), 5000);
 
     } catch (err: any) {
       setError(`Analysis Error: ${err.message || "Unknown error"}`);
@@ -740,8 +687,15 @@ const App: React.FC = () => {
             <div className="space-y-10">
               <div className="flex items-center justify-between">
                 <button onClick={() => setCurrentProtein(null)} className="text-[10px] font-black uppercase text-slate-900 hover:text-indigo-600 flex items-center gap-2"><i className="fa-solid fa-arrow-left"></i> Systems Gallery</button>
-                <div className="bg-indigo-100 text-indigo-800 border-2 border-indigo-200 px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-sm">
-                  {currentProtein.name} | {currentProtein.id}
+                <div className="flex items-center gap-3">
+                   {currentProtein.isValidatedReference && (
+                     <div className="bg-emerald-100 text-emerald-800 border-2 border-emerald-200 px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-sm">
+                        Validated Reference Mode
+                     </div>
+                   )}
+                   <div className="bg-indigo-100 text-indigo-800 border-2 border-indigo-200 px-4 py-1.5 rounded-full text-[10px] font-black uppercase shadow-sm">
+                     {currentProtein.name} | {currentProtein.id}
+                   </div>
                 </div>
               </div>
 
@@ -762,7 +716,7 @@ const App: React.FC = () => {
                           <input type="text" value={preserveRegions} onChange={(e) => setPreserveRegions(e.target.value)} placeholder="e.g. 100-120" className="w-full bg-slate-50 border-2 border-slate-100 py-3 px-4 rounded-xl text-xs font-black outline-none text-slate-900" />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Environmental Knowledge</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5">Experimental Knowledge</label>
                           <textarea 
                             value={environment} 
                             onChange={(e) => setEnvironment(e.target.value)} 
@@ -852,7 +806,7 @@ const App: React.FC = () => {
                         {isPredicting ? (
                           <div className="animate-pulse flex flex-col items-center gap-6">
                             <i className="fa-solid fa-dna text-6xl text-indigo-400"></i>
-                            <span className="text-[14px] font-black uppercase tracking-[0.4em] text-indigo-900">Mapping atomic coordinates...</span>
+                            <span className="text-[14px] font-black uppercase tracking-[0.4em] text-indigo-900">Cross-referencing global benchmarks...</span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center gap-6">

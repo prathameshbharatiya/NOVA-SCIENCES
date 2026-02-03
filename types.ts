@@ -11,6 +11,12 @@ export enum RiskTolerance {
   HIGH = 'High (Exploratory)'
 }
 
+export enum MutationRegime {
+  WELL_UNDERSTOOD = 'Well-understood regime',
+  MODERATE = 'Moderately-understood regime',
+  FRONTIER = 'Frontier regime'
+}
+
 export interface ExperimentalPreset {
   name: string;
   description: string;
@@ -29,6 +35,13 @@ export interface Mutation {
   mutant: string;
 }
 
+export interface BenchmarkAlignment {
+  dataset: string;
+  alignmentScore: number; // 0-100
+  correlationType: 'Direct' | 'Heuristic' | 'Structural Similarity';
+  keyInsight: string;
+}
+
 export interface ConfidenceBreakdown {
   structuralConfidence: 'High' | 'Medium' | 'Low';
   disorderRisk: 'Low' | 'Medium' | 'High';
@@ -37,6 +50,40 @@ export interface ConfidenceBreakdown {
   experimentalEvidence: 'None' | 'Mixed' | 'Supporting' | 'Contradictory';
   overallConfidence: 'High' | 'Medium' | 'Low';
   confidenceRationale: string;
+}
+
+export interface PredictionResult {
+  protein: string;
+  uniprotId: string;
+  mutation: string;
+  deltaDeltaG: number; 
+  stabilityImpact: 'Stabilizing' | 'Neutral' | 'Destabilizing' | 'Highly Destabilizing';
+  confidence: number; // This is the final Decision Confidence (Defensibility)
+  regime: MutationRegime;
+  patternAnchors: string[];
+  signalConsistency: 'High Agreement' | 'Conflicting Signals' | 'Neutral';
+  assumptions: string[];
+  relativeRank: number; 
+  heuristicNotes: string[]; 
+  warnings: string[];
+  nextActions: string[];
+  structuralAnalysis: string;
+  functionalImpact: string;
+  riskBreakdown: string;
+  clinicalSignificance: string;
+  references: string[];
+  reproducibility: ReproducibilityMetadata;
+  reportSummary: string;
+  disclaimer: string;
+  goalAlignment: 'High' | 'Medium' | 'Low';
+  tradeOffAnalysis: string;
+  justification: string;
+  isValidatedReference: boolean;
+  confidenceMode: 'Validated Reference Mode' | 'General Reasoning Mode';
+  confidenceBreakdown: ConfidenceBreakdown;
+  functionalRegionSensitivity: 'High' | 'Medium' | 'Low';
+  comparativeContext: string;
+  benchmarkAlignments: BenchmarkAlignment[];
 }
 
 export interface ReproducibilityMetadata {
@@ -58,39 +105,6 @@ export interface SuggestedMutation {
   confidence: 'High' | 'Medium' | 'Low';
 }
 
-export interface PredictionResult {
-  protein: string;
-  uniprotId: string;
-  mutation: string;
-  deltaDeltaG: number; 
-  stabilityImpact: 'Stabilizing' | 'Neutral' | 'Destabilizing' | 'Highly Destabilizing';
-  confidence: number; 
-  relativeRank: number; 
-  heuristicNotes: string[]; 
-  warnings: string[];
-  nextActions: string[];
-  structuralAnalysis: string;
-  functionalImpact: string;
-  riskBreakdown: string;
-  clinicalSignificance: string;
-  references: string[];
-  reproducibility: ReproducibilityMetadata;
-  reportSummary: string;
-  disclaimer: string;
-  goalAlignment: 'High' | 'Medium' | 'Low';
-  tradeOffAnalysis: string;
-  justification: string;
-  isValidatedReference: boolean;
-  confidenceBreakdown: ConfidenceBreakdown;
-  functionalRegionSensitivity: 'High' | 'Medium' | 'Low';
-  comparativeContext: string;
-  guardrails?: {
-    isLargeProtein: boolean;
-    isInDisorderedRegion: boolean;
-    isLowConfidenceSite: boolean;
-  };
-}
-
 export interface DecisionMemo {
   recommended: Array<{
     rank: number;
@@ -99,7 +113,10 @@ export interface DecisionMemo {
     goalAlignment: string;
     confidence: string;
     risk: string;
-    confidenceBreakdown?: ConfidenceBreakdown;
+    regime?: MutationRegime;
+    patternAnchors?: string[];
+    assumptions?: string[];
+    benchmarkRef?: string;
   }>;
   discouraged: Array<{
     mutation: string;
@@ -109,6 +126,7 @@ export interface DecisionMemo {
   summary: string;
   memoryContext: string;
   referenceContextApplied: boolean;
+  confidenceMode: 'Validated Reference Mode' | 'General Reasoning Mode';
   logInsights?: string;
   failureAwareNotes?: string;
 }

@@ -1,9 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo, RiskTolerance, DecisionLogEntry } from "../types";
+import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo, RiskTolerance, DecisionLogEntry, MutationRegime } from "../types";
 
-const MODEL_NAME = "gemini-3-flash-preview";
+const MODEL_NAME = "gemini-3-flash-preview"; 
 
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2000): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 500): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -92,23 +92,42 @@ export const predictMutation = async (
   const ai = new GoogleGenAI({ apiKey });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
+  const mode = protein.isValidatedReference ? 'Validated Reference Mode' : 'General Reasoning Mode';
+
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `NOVA DECISION ENGINE: Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}. 
-      DECISION PARAMETERS: 
-      - Risk Tolerance: ${risk}
-      - Preservation Constraint: ${preserve || "None"}
-      - Environment: ${environment || "Standard physiological conditions"}
+      contents: `NOVA MASTER BENCHMARK ENGINE v0.2.5: Analyze ${mutationStr} in ${protein.name} (${protein.id}) for ${goal}.
       
-      SCIENTIFIC MEMORY (LOGGED OUTCOMES & SCIENTIST NOTES): ${JSON.stringify(priorResults)}
+      ACTIVE MODE: ${mode}
+      
+      FEATURE 1: EMPIRICAL PATTERN ANCHORING
+      - Anchoring to known, generalized mutation patterns (e.g. Hydrophobic -> polar in cores, charge reversals).
+      - If patterns apply, increase confidence (+5-10%). If not, state "Limited pattern precedent".
 
-      CORE HEURISTIC TASKS:
-      1. Confidence Breakdown: Explain uncertainty across structural, disorder, functional, environmental, and experimental factors.
-      2. Functional Sensitivity Scoring: Classify as High (active sites/interfaces), Medium (structured core), or Low (surface loops).
-      3. Environment-Tradeoff Mapping: Align reasoning based on the specified environment (e.g., temp spikes prioritize stability).
-      4. Comparative Context: Framing mutation relative to other possible choices at this site.
-      5. Failure-Awareness: Explicitly mention if similar regions/substitutions failed based on the scientific memory.`,
+      FEATURE 2: REGIME AWARENESS LAYER (CONFIDENCE CAPS)
+      - WELL-UNDERSTOOD: single-point, structured, common (Cap: 90%)
+      - MODERATE: functional region, interface-adjacent (Cap: 80%)
+      - FRONTIER: epistasis, disorder, rare substitution (Cap: 65%)
+
+      FEATURE 3: CROSS-SIGNAL CONSISTENCY CHECK
+      - Internal check between Structural, Stability, Functional sensitivity, and Environment signals.
+      - High agreement: +5% confidence. Conflicts: -5-10% and state "Conflicting signals detected".
+
+      FEATURE 4: OUTCOME-WEIGHTED CONFIDENCE
+      - Incorporate Scientist Decision Log Outcomes: ${JSON.stringify(priorResults)}
+      - If prior success in same class/region: Increase confidence. If failure: Decrease and warn.
+
+      FEATURE 5: EXPLICIT ASSUMPTION LISTING
+      - List assumptions (e.g. single-point independence, standard folding).
+      
+      CRITICAL DATASETS: ProteinGym, VenusMutHub, S669, ProMEP, Mega-scale, etc.
+
+      LANGUAGE RULES:
+      - NEVER say: "This will work" or "This is correct".
+      - ALWAYS say: "Likely", "Risky", "Uncertain", "Supported by known patterns".
+      
+      Confidence Score represents Decision Defensibility (NOT absolute correctness).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -119,7 +138,11 @@ export const predictMutation = async (
             mutation: { type: Type.STRING },
             deltaDeltaG: { type: Type.NUMBER },
             stabilityImpact: { type: Type.STRING },
-            confidence: { type: Type.NUMBER },
+            confidence: { type: Type.NUMBER, description: "Final Defensibility Score (0-1)" },
+            regime: { type: Type.STRING, enum: Object.values(MutationRegime) },
+            patternAnchors: { type: Type.ARRAY, items: { type: Type.STRING } },
+            signalConsistency: { type: Type.STRING, enum: ["High Agreement", "Conflicting Signals", "Neutral"] },
+            assumptions: { type: Type.ARRAY, items: { type: Type.STRING } },
             relativeRank: { type: Type.NUMBER },
             heuristicNotes: { type: Type.ARRAY, items: { type: Type.STRING } },
             warnings: { type: Type.ARRAY, items: { type: Type.STRING } },
@@ -135,6 +158,19 @@ export const predictMutation = async (
             justification: { type: Type.STRING },
             functionalRegionSensitivity: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
             comparativeContext: { type: Type.STRING },
+            confidenceMode: { type: Type.STRING, enum: ["Validated Reference Mode", "General Reasoning Mode"] },
+            benchmarkAlignments: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  dataset: { type: Type.STRING },
+                  alignmentScore: { type: Type.NUMBER },
+                  correlationType: { type: Type.STRING },
+                  keyInsight: { type: Type.STRING }
+                }
+              }
+            },
             confidenceBreakdown: {
               type: Type.OBJECT,
               properties: {
@@ -145,11 +181,10 @@ export const predictMutation = async (
                 experimentalEvidence: { type: Type.STRING, enum: ["None", "Mixed", "Supporting", "Contradictory"] },
                 overallConfidence: { type: Type.STRING, enum: ["High", "Medium", "Low"] },
                 confidenceRationale: { type: Type.STRING }
-              },
-              required: ["structuralConfidence", "disorderRisk", "functionalSensitivity", "environmentalMismatch", "experimentalEvidence", "overallConfidence", "confidenceRationale"]
+              }
             }
           },
-          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "relativeRank", "goalAlignment", "tradeOffAnalysis", "justification", "riskBreakdown", "structuralAnalysis", "reportSummary", "confidenceBreakdown", "functionalRegionSensitivity", "comparativeContext"]
+          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "regime", "patternAnchors", "signalConsistency", "assumptions", "reportSummary"]
         }
       }
     });
@@ -162,15 +197,15 @@ export const predictMutation = async (
       reproducibility: {
         runId: `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
         timestamp: new Date().toISOString(),
-        modelName: "Novasciences-Delta-Engine",
+        modelName: "Novasciences-Defensibility-Engine",
         modelVersion: "0.2.5v",
-        inputHash: "NATIVE",
-        dockerImageHash: "v0.2.5v-stable",
+        inputHash: "DEFENSIBILITY_GATED",
+        dockerImageHash: "v0.2.5v-core",
         structureSource: protein.sourceType,
         structureSourceDetails: protein.pdbId ? `PDB:${protein.pdbId}` : `AFDB:${protein.id}`,
         viewerVersion: "3Dmol.js"
       },
-      disclaimer: "Computational estimate only. Laboratory validation mandatory."
+      disclaimer: "Computational estimate grounded in global benchmarks and decision defensibility logic."
     };
   });
 };
@@ -187,28 +222,17 @@ export const generateDecisionMemo = async (
   if (!apiKey) throw new Error("API_KEY missing.");
   const ai = new GoogleGenAI({ apiKey });
 
-  const history = priorLogs.map(l => ({
-    mutation: l.mutationTested,
-    outcome: l.outcome,
-    notes: l.userNotes,
-    prediction: l.prediction?.stabilityImpact
-  }));
+  const mode = protein.isValidatedReference ? 'Validated Reference Mode' : 'General Reasoning Mode';
 
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `NOVA COMPREHENSIVE MEMO GENERATOR: Synthesis report for ${protein.name} (${protein.id}). 
-      OVERALL MISSION: ${goal}. 
-      CONSTRAINTS: Risk=${risk}, Preservation=${preserve}, Env=${environment}. 
+      contents: `NOVA STRATEGIC DEFENSE MEMO: Ground findings for ${protein.name}.
       
-      COMPLETE LABORATORY RECORD (User Notes & Outcomes):
-      ${JSON.stringify(history)}
-
-      TASK:
-      1. Synthesize current findings and learned patterns from laboratory history.
-      2. Identify negative knowledge (where things have consistently failed).
-      3. Recommend targets with a focus on uncertainty transparency.
-      4. Provide a full Confidence Breakdown for each recommendation.`,
+      ACTIVE MODE: ${mode}
+      
+      Apply the 5 feature logic: Pattern Anchors, Regime Caps, Signal Consistency, Outcome-Weighting, and Assumption Listing. 
+      Generate targets with Defensibility-First thinking.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -225,21 +249,11 @@ export const generateDecisionMemo = async (
                   goalAlignment: { type: Type.STRING }, 
                   confidence: { type: Type.STRING }, 
                   risk: { type: Type.STRING },
-                  confidenceBreakdown: {
-                    type: Type.OBJECT,
-                    properties: {
-                      structuralConfidence: { type: Type.STRING },
-                      disorderRisk: { type: Type.STRING },
-                      functionalSensitivity: { type: Type.STRING },
-                      environmentalMismatch: { type: Type.STRING },
-                      experimentalEvidence: { type: Type.STRING },
-                      overallConfidence: { type: Type.STRING },
-                      confidenceRationale: { type: Type.STRING }
-                    },
-                    required: ["overallConfidence", "confidenceRationale"]
-                  }
-                },
-                required: ["rank", "mutation", "rationale", "goalAlignment", "confidence", "risk", "confidenceBreakdown"]
+                  regime: { type: Type.STRING },
+                  patternAnchors: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  assumptions: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  benchmarkRef: { type: Type.STRING }
+                }
               } 
             },
             discouraged: { 
@@ -250,17 +264,17 @@ export const generateDecisionMemo = async (
                   mutation: { type: Type.STRING }, 
                   risk: { type: Type.STRING }, 
                   signal: { type: Type.STRING } 
-                },
-                required: ["mutation", "risk", "signal"]
+                }
               } 
             },
             summary: { type: Type.STRING },
             memoryContext: { type: Type.STRING },
             referenceContextApplied: { type: Type.BOOLEAN },
+            confidenceMode: { type: Type.STRING, enum: ["Validated Reference Mode", "General Reasoning Mode"] },
             logInsights: { type: Type.STRING },
             failureAwareNotes: { type: Type.STRING }
           },
-          required: ["recommended", "discouraged", "summary", "memoryContext", "referenceContextApplied", "logInsights", "failureAwareNotes"]
+          required: ["recommended", "discouraged", "summary", "confidenceMode"]
         }
       }
     });

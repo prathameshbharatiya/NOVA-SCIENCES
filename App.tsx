@@ -385,17 +385,17 @@ const App: React.FC = () => {
                 <div class="mode-tag ${decisionMemo.confidenceMode === 'Validated Reference Mode' ? 'mode-validated' : 'mode-general'}" style="margin-bottom: 20px;">
                     ENGINE MODE: ${decisionMemo.confidenceMode}
                 </div>
-                <div class="roadmap-summary">"${decisionMemo.summary}"</div>
+                <div class="roadmap-summary">"${decisionMemo.summary || 'Strategic overview complete.'}"</div>
                 <div style="margin-top: 40px; display: flex; gap: 40px;">
                     <div>
                         <div style="font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">Context Memory</div>
-                        <div style="font-size: 14px; font-weight: 700;">${decisionMemo.memoryContext}</div>
+                        <div style="font-size: 14px; font-weight: 700;">${decisionMemo.memoryContext || 'Inference based.'}</div>
                     </div>
                 </div>
             </div>
 
             <div style="display: grid; grid-template-cols: 1fr 1fr; gap: 30px; margin-bottom: 30px;">
-                ${decisionMemo.recommended.map(rec => `
+                ${(decisionMemo.recommended || []).map(rec => `
                     <div class="mut-card" style="border-left-color: var(--emerald);">
                         <div class="confidence-meter">
                             <div>
@@ -424,9 +424,9 @@ const App: React.FC = () => {
                         </div>
                         <div style="text-align: right;">
                             <div class="conf-label">Simulation Trust</div>
-                            <div class="conf-score">${entry.prediction?.confidence ? (entry.prediction.confidence * 100).toFixed(0) + '%' : '...'}</div>
+                            <div class="conf-score">${entry.prediction?.confidence ? (Number(entry.prediction.confidence) * 100).toFixed(0) + '%' : '...'}</div>
                             <div style="font-size: 14px; font-weight: 800; color: var(--primary); margin-top: 10px;">
-                                &Delta;&Delta;G: ${entry.prediction?.deltaDeltaG.toFixed(2)} kcal/mol
+                                &Delta;&Delta;G: ${entry.prediction ? Number(entry.prediction.deltaDeltaG).toFixed(2) : '0.00'} kcal/mol
                             </div>
                         </div>
                     </div>
@@ -435,7 +435,7 @@ const App: React.FC = () => {
 
                     <h4 style="font-size: 11px; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 20px;">Benchmark Verification (Global Databases)</h4>
                     <div class="bench-grid">
-                        ${entry.prediction?.benchmarkAlignments?.map(b => `
+                        ${(entry.prediction?.benchmarkAlignments || []).map(b => `
                             <div class="bench-tag">
                                 <div style="font-weight: 900; color: var(--primary);">${b.dataset}</div>
                                 <div style="font-weight: 800; font-size: 12px; margin: 4px 0;">${b.alignmentScore}% Match</div>
@@ -471,6 +471,7 @@ const App: React.FC = () => {
   };
 
   const parseMutationString = (mutStr: string) => {
+    if (!mutStr) return;
     const match = mutStr.match(/([A-Z])(\d+)([A-Z])/i);
     if (match) {
       setMutation({ 
@@ -494,7 +495,6 @@ const App: React.FC = () => {
     logEvent('PREDICTION_START', `Analyzing ${mutation.wildtype}${mutation.position}${mutation.mutant} for ${currentProtein.id}`);
     
     try {
-      // Parallel execution: Atomic Analysis and Strategic Memo happen at the same time.
       const [pred, memo] = await Promise.all([
         predictMutation(
           currentProtein, 
@@ -514,6 +514,8 @@ const App: React.FC = () => {
           environment
         )
       ]);
+
+      if (!pred || !memo) throw new Error("Synthesis failed to return valid data structures.");
 
       setResult(pred);
       setDecisionMemo(memo);
@@ -539,7 +541,9 @@ const App: React.FC = () => {
         outcome: 'Not Tested Yet'
       };
       setLogEntries(prev => [newEntry, ...prev]);
-      logEvent('PREDICTION_SUCCESS', `Analysis complete: ΔΔG ${pred.deltaDeltaG.toFixed(2)}`);
+      
+      const safeDelta = Number(pred.deltaDeltaG);
+      logEvent('PREDICTION_SUCCESS', `Analysis complete: ΔΔG ${isNaN(safeDelta) ? '0.00' : safeDelta.toFixed(2)}`);
       
       setTimeout(() => {
         resultsContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -562,6 +566,7 @@ const App: React.FC = () => {
   };
 
   const restoreLogContext = (entry: DecisionLogEntry) => {
+    if (!entry) return;
     setGoal(entry.goal);
     setRiskTolerance(entry.riskTolerance);
     setPreserveRegions(entry.preserveRegions);
@@ -750,7 +755,7 @@ const App: React.FC = () => {
                     </section>
                   </div>
                   <div className="bg-white rounded-[2.5rem] border-2 border-slate-100 p-8 shadow-lg max-h-[500px] overflow-y-auto custom-scrollbar">
-                    <DecisionLog entries={logEntries} onUpdateEntry={() => {}} onRestore={restoreLogContext} />
+                    <DecisionLog entries={logEntries} onUpdateEntry={(id, updates) => setLogEntries(prev => prev.map(e => e.id === id ? {...e, ...updates} : e))} onRestore={restoreLogContext} />
                   </div>
                 </div>
 

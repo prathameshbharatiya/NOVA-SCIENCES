@@ -39,7 +39,7 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                   entry.outcome === 'Negative' ? 'bg-rose-100 text-rose-600' :
                   'bg-slate-100 text-slate-600'
                 }`}>
-                  {entry.mutationTested.substring(0, 1)}
+                  {(entry.mutationTested || 'M').substring(0, 1)}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -76,7 +76,7 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                   <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                     <h5 className="text-[8px] font-black uppercase text-slate-400 mb-2 tracking-widest">Top Recommendations</h5>
                     <div className="space-y-1 flex-1">
-                      {entry.memo?.recommended.slice(0, 3).map((r, i) => (
+                      {entry.memo?.recommended?.slice(0, 3).map((r, i) => (
                         <p key={i} className="text-[10px] font-black text-indigo-600 truncate">#{r.rank} {r.mutation}</p>
                       ))}
                     </div>
@@ -120,8 +120,8 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
 
                 <div className="flex justify-between items-center pt-4 border-t border-slate-200">
                   <div className="flex flex-col">
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter text-slate-900">Run: {entry.prediction?.reproducibility.runId}</span>
-                    <span className="text-[7px] font-bold text-slate-300 uppercase tracking-tighter">Engine: {entry.prediction?.reproducibility.modelName} v{entry.prediction?.reproducibility.modelVersion}</span>
+                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter text-slate-900">Run: {entry.prediction?.reproducibility?.runId || 'N/A'}</span>
+                    <span className="text-[7px] font-bold text-slate-300 uppercase tracking-tighter">Engine: {entry.prediction?.reproducibility?.modelName || 'Core'} v{entry.prediction?.reproducibility?.modelVersion || '0.2.5'}</span>
                   </div>
                   <button 
                     onClick={() => onRestore(entry)}

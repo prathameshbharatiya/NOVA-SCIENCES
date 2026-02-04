@@ -20,7 +20,6 @@ declare global {
 
 /**
  * Enhanced Idealized side-chain offsets relative to CA.
- * Scaled to provide maximum visual clarity for scientists.
  */
 const SIDE_CHAIN_TEMPLATES: Record<string, number[][]> = {
   'A': [[1.5, 1.5, 1.5]], 
@@ -45,7 +44,7 @@ const SIDE_CHAIN_TEMPLATES: Record<string, number[][]> = {
   'Y': [[1.5, 1.5, 1.5], [2.5, 2.5, 1.5], [4.0, 3.5, 1.5], [5.5, 3.5, 1.5], [6.5, 3.5, 1.5], [5.5, 2.0, 1.5], [4.0, 2.0, 1.5]],
 };
 
-const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uniprotId, pdbId, localData, mutation, showIdealizedMutant, onStructureStatus }, ref) => {
+const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uniprotId, pdbId, mutation, showIdealizedMutant, onStructureStatus }, ref) => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const glViewer = useRef<any>(null);
   const [loading, setLoading] = useState(false);
@@ -60,8 +59,10 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
       viewer.render();
       
       const capture = (v: any) => {
-        if (typeof v.png === 'function') return v.png();
-        if (typeof v.pngURI === 'function') return v.pngURI();
+        try {
+          if (typeof v.png === 'function') return v.png();
+          if (typeof v.pngURI === 'function') return v.pngURI();
+        } catch (e) { console.error('Snapshot capture failed', e); }
         return '';
       };
 
@@ -79,8 +80,8 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
   }));
 
   const fetchStructure = async (uId: string, pId?: string) => {
-    const cleanId = uId.trim().toUpperCase();
-    const cleanPdb = pId?.trim().toUpperCase();
+    const cleanId = (uId || '').trim().toUpperCase();
+    const cleanPdb = (pId || '').trim().toUpperCase();
 
     if (cleanPdb) {
       try {
@@ -136,7 +137,7 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
 
     loadData();
 
-    const handleResize = () => viewer.resize();
+    const handleResize = () => viewer && viewer.resize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [uniprotId, pdbId]);
@@ -150,10 +151,9 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
       viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
       const sel = { resi: mutation.position };
       
-      // WILD-TYPE SIDE CHAIN: Subtle transparency for context
+      // WILD-TYPE SIDE CHAIN
       viewer.addStyle(sel, { stick: { radius: 0.2, opacity: 0.3, color: 'lightgrey' } });
       
-      // Clear Residue Label
       viewer.addLabel(`${mutation.wildtype}${mutation.position}${mutation.mutant}`, { 
         fontSize: 16, 
         fontColor: 'white',
@@ -162,7 +162,6 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
         position: sel 
       });
 
-      // Disclaimer - Persistent Fixed
       viewer.addLabel("LOCAL SIDE-CHAIN SUBSTITUTION (IDEALIZED)", {
         fontSize: 10,
         fontColor: '#ff0000',
@@ -172,46 +171,46 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
         fixed: true
       });
 
-      // MUTANT SIDE CHAIN: Rendering with ultra-high contrast red
       if (showIdealizedMutant) {
-        const mutantCode = mutation.mutant.toUpperCase();
+        const mutantCode = (mutation.mutant || 'A').toUpperCase();
         const template = SIDE_CHAIN_TEMPLATES[mutantCode] || [];
         
-        const atoms = viewer.getModel().selectedAtoms(sel);
-        const caAtom = atoms.find((a: any) => a.atom === 'CA');
-        
-        if (caAtom) {
-          let prevPoint = { x: caAtom.x, y: caAtom.y, z: caAtom.z };
-          template.forEach((offset) => {
-            const nextPoint = { 
-              x: caAtom.x + offset[0], 
-              y: caAtom.y + offset[1], 
-              z: caAtom.z + offset[2] 
-            };
-            
-            // SUPER THICK STICKS (0.5 radius)
-            viewer.addCylinder({
-              start: prevPoint,
-              end: nextPoint,
-              radius: 0.5,
-              color: '#ff1111',
-              fromCap: 1,
-              toCap: 1
-            });
-            
-            // MASSIVE ATOM SPHERES (0.7 radius)
-            viewer.addSphere({
-              center: nextPoint,
-              radius: 0.7,
-              color: '#ff1111'
-            });
-            
-            prevPoint = nextPoint; 
-          });
+        const model = viewer.getModel();
+        if (model) {
+          const atoms = model.selectedAtoms(sel);
+          if (atoms && atoms.length > 0) {
+            const caAtom = atoms.find((a: any) => a.atom === 'CA');
+            if (caAtom) {
+              let prevPoint = { x: caAtom.x, y: caAtom.y, z: caAtom.z };
+              template.forEach((offset) => {
+                const nextPoint = { 
+                  x: caAtom.x + offset[0], 
+                  y: caAtom.y + offset[1], 
+                  z: caAtom.z + offset[2] 
+                };
+                
+                viewer.addCylinder({
+                  start: prevPoint,
+                  end: nextPoint,
+                  radius: 0.5,
+                  color: '#ff1111',
+                  fromCap: 1,
+                  toCap: 1
+                });
+                
+                viewer.addSphere({
+                  center: nextPoint,
+                  radius: 0.7,
+                  color: '#ff1111'
+                });
+                
+                prevPoint = nextPoint; 
+              });
+            }
+          }
         }
       }
 
-      // Lock camera to mutation site
       viewer.zoomTo(sel, 800);
       viewer.render();
     }
@@ -221,7 +220,6 @@ const ProteinViewer = forwardRef<ProteinViewerHandle, ProteinViewerProps>(({ uni
     <div className="relative rounded-[2.5rem] overflow-hidden bg-slate-900 h-[600px] border-4 border-slate-800 shadow-2xl">
       <div ref={viewerRef} className="w-full h-full"></div>
       
-      {/* Visual Axis Indicator Legend */}
       <div className="absolute bottom-6 left-6 z-20 flex flex-col gap-2 bg-black/40 backdrop-blur-sm p-3 rounded-2xl border border-white/5">
          <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500"></span><span className="text-[8px] font-black text-white uppercase tracking-widest">Mutant Side-Chain</span></div>
          <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-gray-400"></span><span className="text-[8px] font-black text-white uppercase tracking-widest">Wild-Type Context</span></div>

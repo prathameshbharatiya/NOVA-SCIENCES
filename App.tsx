@@ -28,13 +28,15 @@ type DashboardTab = 'analysis' | 'roadmap';
 const App: React.FC = () => {
   // Check version and clear cache if mismatch
   useEffect(() => {
-    const savedVersion = localStorage.getItem(VERSION_KEY);
-    if (savedVersion !== APP_VERSION) {
-      console.log(`Version mismatch: ${savedVersion} -> ${APP_VERSION}. Clearing cache.`);
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(LOGS_KEY);
-      localStorage.setItem(VERSION_KEY, APP_VERSION);
-    }
+    try {
+      const savedVersion = localStorage.getItem(VERSION_KEY);
+      if (savedVersion !== APP_VERSION) {
+        console.log(`Version mismatch: ${savedVersion} -> ${APP_VERSION}. Clearing cache.`);
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(LOGS_KEY);
+        localStorage.setItem(VERSION_KEY, APP_VERSION);
+      }
+    } catch (e) { console.warn("Version check failed", e); }
   }, []);
 
   const [logEntries, setLogEntries] = useState<DecisionLogEntry[]>(() => {
@@ -126,6 +128,22 @@ const App: React.FC = () => {
     });
   };
 
+  /**
+   * Helper to parse mutation strings (e.g., R273H) and update mutation state.
+   */
+  const parseMutationString = (mutStr: string) => {
+    if (!mutStr) return;
+    const match = mutStr.match(/([A-Z])(\d+)([A-Z])/i);
+    if (match) {
+      setMutation({ 
+        wildtype: match[1].toUpperCase(), 
+        position: parseInt(match[2]), 
+        mutant: match[3].toUpperCase() 
+      });
+      logEvent('MUTATION_SELECT', `Residue target set to ${mutStr}`);
+    }
+  };
+
   useEffect(() => {
     const combined = logEntries
       .filter(e => e && e.outcome !== 'Not Tested Yet')
@@ -144,7 +162,7 @@ const App: React.FC = () => {
     setIsRevealing(false);
     setHasViewedResults(false); 
     setError(null);
-    setResult(null); // Clear previous results to avoid mismatched renders
+    setResult(null); 
     setDecisionMemo(null);
     setShowSuccessToast(false);
     
@@ -159,7 +177,6 @@ const App: React.FC = () => {
       if (!pred) throw new Error("Synthesis failed to return a valid prediction structure.");
       if (!memo) throw new Error("Synthesis failed to return a valid roadmap structure.");
 
-      // CRITICAL: Set state ONLY if data is valid
       setResult(pred);
       setDecisionMemo(memo);
       setIsRevealing(true);
@@ -225,7 +242,7 @@ const App: React.FC = () => {
     
     const mutMatch = (entry.mutationTested || '').match(/([A-Z])(\d+)([A-Z])/i);
     if (mutMatch) {
-       setMutation({ wildtype: mutMatch[1], position: parseInt(mutMatch[2]), mutant: mutMatch[3] });
+       setMutation({ wildtype: mutMatch[1].toUpperCase(), position: parseInt(mutMatch[2]), mutant: mutMatch[3].toUpperCase() });
     }
   };
 
@@ -409,7 +426,7 @@ const App: React.FC = () => {
                       showIdealizedMutant={showIdealizedMutant}
                     />
                     <div className="absolute top-8 left-8 z-20 flex items-center gap-4 bg-[#0f172a]/90 backdrop-blur-xl px-6 py-3 rounded-3xl border border-white/10 shadow-2xl">
-                      <label className="relative inline-flex i-center cursor-pointer">
+                      <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" className="sr-only peer" checked={showIdealizedMutant} onChange={(e) => setShowIdealizedMutant(e.target.checked)} />
                         <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-500"></div>
                       </label>

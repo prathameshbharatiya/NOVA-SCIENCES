@@ -1,7 +1,9 @@
-import { GoogleGenAI, Type } from "@google/genai";
+
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo, RiskTolerance, DecisionLogEntry, MutationRegime } from "../types";
 
-const MODEL_NAME = "gemini-3-flash-preview"; 
+// Complex STEM reasoning for protein engineering requires gemini-3-pro-preview.
+const MODEL_NAME = "gemini-3-pro-preview"; 
 
 /**
  * Safe JSON parsing helper to prevent crashing the app on malformed AI output.
@@ -39,26 +41,29 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDel
   throw lastError;
 }
 
-const extractText = (response: any, fallbackError: string): string => {
+const extractText = (response: GenerateContentResponse, fallbackError: string): string => {
   if (response.candidates && response.candidates[0]?.finishReason === 'SAFETY') {
     throw new Error("Biological safety filter triggered. Research strictly limited to non-harmful proteins.");
   }
+  // Use .text property directly as per Google GenAI SDK guidelines.
   const text = response.text;
   if (!text) throw new Error(fallbackError);
   return text;
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY missing from environment.");
-  const ai = new GoogleGenAI({ apiKey });
+  // Always initialize GoogleGenAI using the process.env.API_KEY directly.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `You are NOVA, a decision-first protein engineering workstation. Resolve protein: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 relevant mutations.`,
+      contents: `Resolve protein: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 relevant mutations.`,
       config: {
+        systemInstruction: "You are NOVA, a decision-first protein engineering workstation. Resolve protein identities with scientific precision.",
         responseMimeType: "application/json",
+        // Enable moderate thinking for entity resolution.
+        thinkingConfig: { thinkingBudget: 4096 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -101,9 +106,7 @@ export const predictMutation = async (
   preserve: string,
   environment: string
 ): Promise<PredictionResult> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY missing.");
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
   const mode = protein.isValidatedReference ? 'Validated Reference Mode' : 'General Reasoning Mode';
@@ -123,7 +126,10 @@ export const predictMutation = async (
       
       Confidence Score represents Decision Defensibility (0 to 1).`,
       config: {
+        systemInstruction: "You are NOVA, a decision-first protein engineering workstation. Perform detailed structural and functional analysis using global benchmarks. Maintain rigorous scientific uncertainty.",
         responseMimeType: "application/json",
+        // Advanced STEM tasks like mutation prediction benefit from maximum thinking budget.
+        thinkingConfig: { thinkingBudget: 32768 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -212,9 +218,7 @@ export const generateDecisionMemo = async (
   preserve: string,
   environment: string
 ): Promise<DecisionMemo> => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API_KEY missing.");
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const mode = protein.isValidatedReference ? 'Validated Reference Mode' : 'General Reasoning Mode';
 
@@ -223,7 +227,9 @@ export const generateDecisionMemo = async (
       model: MODEL_NAME,
       contents: `NOVA STRATEGIC DEFENSE MEMO: Ground findings for ${protein.name}. ACTIVE MODE: ${mode}. Generate targets with Defensibility-First thinking.`,
       config: {
+        systemInstruction: "You are NOVA, a strategic protein engineering consultant. Synthesize complex structural findings into actionable engineering roadmaps.",
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 16384 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {

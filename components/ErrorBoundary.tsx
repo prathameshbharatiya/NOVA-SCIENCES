@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+
+import React, { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -9,7 +10,8 @@ interface State {
   error: Error | null;
 }
 
-class ErrorBoundary extends Component<Props, State> {
+// Ensure the class correctly extends React.Component with explicitly defined Props and State.
+class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null
@@ -24,7 +26,11 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render() {
-    if (this.state.hasError) {
+    // Destructure children from this.props to ensure the property is correctly accessed within the render context.
+    const { children } = this.props;
+    const { hasError, error } = this.state;
+
+    if (hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center p-10 bg-slate-50 text-center">
           <div className="w-24 h-24 bg-rose-100 text-rose-600 rounded-[2rem] flex items-center justify-center mb-8 text-4xl shadow-2xl shadow-rose-200 animate-bounce">
@@ -37,7 +43,7 @@ class ErrorBoundary extends Component<Props, State> {
           <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 text-left mb-10 w-full max-w-2xl shadow-inner group transition-all">
             <div className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Stack Trace / Debug Log</div>
             <code className="text-xs text-rose-500 font-mono leading-relaxed block overflow-auto max-h-60 custom-scrollbar">
-              {this.state.error?.stack || this.state.error?.toString()}
+              {error?.stack || error?.toString()}
             </code>
           </div>
           <div className="flex gap-4">
@@ -61,7 +67,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return children;
   }
 }
 

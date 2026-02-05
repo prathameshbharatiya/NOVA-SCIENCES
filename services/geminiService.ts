@@ -3,6 +3,20 @@ import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResul
 
 const MODEL_NAME = "gemini-3-flash-preview"; 
 
+/**
+ * Safe JSON parsing helper to prevent crashing the app on malformed AI output.
+ */
+function safeJsonParse<T>(text: string, fallbackDesc: string): T {
+  try {
+    // Attempt to clean the text in case Gemini wraps JSON in markdown blocks
+    const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanedText) as T;
+  } catch (err) {
+    console.error(`JSON Parse Error: ${fallbackDesc}`, text);
+    throw new Error(`The synthesis engine returned an invalid data format. Details: ${fallbackDesc}`);
+  }
+}
+
 async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 500): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
@@ -73,7 +87,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     });
 
     const text = extractText(response, "Failed to resolve protein data.");
-    const parsed = JSON.parse(text);
+    const parsed = safeJsonParse<any>(text, "Protein Metadata Resolution");
     return { ...parsed, sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold', structureStatus: 'idle' };
   });
 };
@@ -101,33 +115,13 @@ export const predictMutation = async (
       
       ACTIVE MODE: ${mode}
       
-      FEATURE 1: EMPIRICAL PATTERN ANCHORING
-      - Anchoring to known, generalized mutation patterns (e.g. Hydrophobic -> polar in cores, charge reversals).
-      - If patterns apply, increase confidence (+5-10%). If not, state "Limited pattern precedent".
-
-      FEATURE 2: REGIME AWARENESS LAYER (CONFIDENCE CAPS)
-      - WELL-UNDERSTOOD: single-point, structured, common (Cap: 90%)
-      - MODERATE: functional region, interface-adjacent (Cap: 80%)
-      - FRONTIER: epistasis, disorder, rare substitution (Cap: 65%)
-
-      FEATURE 3: CROSS-SIGNAL CONSISTENCY CHECK
-      - Internal check between Structural, Stability, Functional sensitivity, and Environment signals.
-      - High agreement: +5% confidence. Conflicts: -5-10% and state "Conflicting signals detected".
-
-      FEATURE 4: OUTCOME-WEIGHTED CONFIDENCE
-      - Incorporate Scientist Decision Log Outcomes: ${JSON.stringify(priorResults)}
-      - If prior success in same class/region: Increase confidence. If failure: Decrease and warn.
-
-      FEATURE 5: EXPLICIT ASSUMPTION LISTING
-      - List assumptions (e.g. single-point independence, standard folding).
-      
       CRITICAL DATASETS: ProteinGym, VenusMutHub, S669, ProMEP, Mega-scale, etc.
 
       LANGUAGE RULES:
       - NEVER say: "This will work" or "This is correct".
       - ALWAYS say: "Likely", "Risky", "Uncertain", "Supported by known patterns".
       
-      Confidence Score represents Decision Defensibility (NOT absolute correctness).`,
+      Confidence Score represents Decision Defensibility (0 to 1).`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -138,7 +132,7 @@ export const predictMutation = async (
             mutation: { type: Type.STRING },
             deltaDeltaG: { type: Type.NUMBER },
             stabilityImpact: { type: Type.STRING },
-            confidence: { type: Type.NUMBER, description: "Final Defensibility Score (0-1)" },
+            confidence: { type: Type.NUMBER },
             regime: { type: Type.STRING, enum: Object.values(MutationRegime) },
             patternAnchors: { type: Type.ARRAY, items: { type: Type.STRING } },
             signalConsistency: { type: Type.STRING, enum: ["High Agreement", "Conflicting Signals", "Neutral"] },
@@ -190,7 +184,7 @@ export const predictMutation = async (
     });
 
     const text = extractText(response, "Prediction engine timeout.");
-    const baseResult = JSON.parse(text);
+    const baseResult = safeJsonParse<any>(text, "Mutation Prediction Logic");
     return { 
       ...baseResult, 
       isValidatedReference: !!protein.isValidatedReference,
@@ -227,12 +221,7 @@ export const generateDecisionMemo = async (
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `NOVA STRATEGIC DEFENSE MEMO: Ground findings for ${protein.name}.
-      
-      ACTIVE MODE: ${mode}
-      
-      Apply the 5 feature logic: Pattern Anchors, Regime Caps, Signal Consistency, Outcome-Weighting, and Assumption Listing. 
-      Generate targets with Defensibility-First thinking.`,
+      contents: `NOVA STRATEGIC DEFENSE MEMO: Ground findings for ${protein.name}. ACTIVE MODE: ${mode}. Generate targets with Defensibility-First thinking.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -278,6 +267,6 @@ export const generateDecisionMemo = async (
         }
       }
     });
-    return JSON.parse(extractText(response, "Memo synthesis failed."));
+    return safeJsonParse<DecisionMemo>(extractText(response, "Memo synthesis failed."), "Strategic Roadmap Synthesis");
   });
 };

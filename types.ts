@@ -1,3 +1,4 @@
+
 export enum ScientificGoal {
   STABILITY = 'Stability Improvement',
   BINDING = 'Binding/Interface Optimization',
@@ -17,10 +18,32 @@ export enum MutationRegime {
   FRONTIER = 'Frontier regime'
 }
 
+export interface ExperimentalEnvironment {
+  ph: number;
+  temp: number;
+  ionicStrength: number;
+  bufferSystem: string;
+}
+
 export interface ExperimentalPreset {
   name: string;
   description: string;
   values: string;
+}
+
+export interface EnvironmentalImpact {
+  leverageFactor: number;
+  reasoning: string;
+  sensitivity: 'High' | 'Moderate' | 'Low';
+  shiftAmount: number;
+}
+
+export interface ScientificPaper {
+  title: string;
+  journal: string;
+  year: number;
+  url: string;
+  relevance: string;
 }
 
 export interface PriorResult {
@@ -40,7 +63,7 @@ export interface Mutation {
 
 export interface BenchmarkAlignment {
   dataset: string;
-  alignmentScore: number; // 0-100
+  alignmentScore: number;
   correlationType: 'Direct' | 'Heuristic' | 'Structural Similarity';
   keyInsight: string;
 }
@@ -48,8 +71,6 @@ export interface BenchmarkAlignment {
 export interface ConfidenceBreakdown {
   structuralConfidence: 'High' | 'Medium' | 'Low';
   disorderRisk: 'Low' | 'Medium' | 'High';
-  functionalSensitivity: 'Low' | 'Medium' | 'High';
-  environmentalMismatch: 'Low' | 'Medium' | 'High';
   experimentalEvidence: 'None' | 'Mixed' | 'Supporting' | 'Contradictory';
   overallConfidence: 'High' | 'Medium' | 'Low';
   confidenceRationale: string;
@@ -66,32 +87,23 @@ export interface PredictionResult {
   patternAnchors: string[];
   signalConsistency: 'High Agreement' | 'Conflicting Signals' | 'Neutral';
   assumptions: string[];
-  relativeRank: number; 
-  heuristicNotes: string[]; 
-  warnings: string[];
-  nextActions: string[];
-  structuralAnalysis: string;
-  functionalImpact: string;
-  riskBreakdown: string;
-  clinicalSignificance: string;
-  references: string[];
-  reproducibility: ReproducibilityMetadata;
   reportSummary: string;
-  disclaimer: string;
   goalAlignment: 'High' | 'Medium' | 'Low';
-  tradeOffAnalysis: string;
-  justification: string;
+  tradeOffAnalysis?: string;
+  justification?: string;
   isValidatedReference: boolean;
   confidenceMode: 'Validated Reference Mode' | 'General Reasoning Mode';
-  confidenceBreakdown: ConfidenceBreakdown;
-  functionalRegionSensitivity: 'High' | 'Medium' | 'Low';
-  comparativeContext: string;
   benchmarkAlignments: BenchmarkAlignment[];
+  scientificPapers: ScientificPaper[];
+  reproducibility: ReproducibilityMetadata;
   empiricalShift?: {
     direction: 'Up' | 'Down' | 'Neutral';
     magnitude: number;
     reason: string;
   };
+  environmentalAnalysis?: EnvironmentalImpact;
+  structuralAnalysis?: string;
+  comparativeContext?: string;
 }
 
 export interface ReproducibilityMetadata {
@@ -121,10 +133,6 @@ export interface DecisionMemo {
     goalAlignment: string;
     confidence: string;
     risk: string;
-    regime?: MutationRegime;
-    patternAnchors?: string[];
-    assumptions?: string[];
-    benchmarkRef?: string;
   }>;
   discouraged: Array<{
     mutation: string;
@@ -132,16 +140,13 @@ export interface DecisionMemo {
     signal: string;
   }>;
   summary: string;
-  memoryContext: string;
-  referenceContextApplied: boolean;
   confidenceMode: 'Validated Reference Mode' | 'General Reasoning Mode';
-  logInsights?: string;
-  failureAwareNotes?: string;
   learningProgress?: {
     learnedPattern: string;
     reRankedCount: number;
     adjustedUncertainty: string;
   };
+  environmentalRoadmapImpact?: string;
 }
 
 export interface DecisionLogEntry {
@@ -150,18 +155,15 @@ export interface DecisionLogEntry {
   proteinName: string;
   uniprotId: string;
   goal: ScientificGoal;
-  riskTolerance: RiskTolerance;
-  preserveRegions: string;
-  environment: string;
   mutationTested: string;
   prediction?: PredictionResult;
   memo?: DecisionMemo;
-  snapshots?: { full: string; zoomed: string };
   userNotes: string;
   outcome: 'Positive' | 'Neutral' | 'Negative' | 'Not Tested Yet';
   assayType?: string;
   resourceIntensity?: 'Low' | 'Medium' | 'High';
   timeRequired?: string;
+  environment: ExperimentalEnvironment;
 }
 
 export interface SystemAuditTrail {
@@ -182,13 +184,8 @@ export interface ProteinMetadata {
   name: string;
   description: string;
   length: number;
-  geneName?: string;
-  organism?: string;
-  sequence?: string;
   sourceType: 'AlphaFold' | 'User-Uploaded' | 'Demo' | 'Sequence-Only';
-  pLDDTAvg?: number;
   suggestedMutations?: SuggestedMutation[];
-  localData?: string; 
   structureStatus?: StructureStatus;
   isValidatedReference?: boolean;
   referenceContext?: string;

@@ -1,39 +1,36 @@
 
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 
+// Define Props interface with optional children to match React.Component's expected structure
 interface Props {
-  // Fix: Make children optional to satisfy JSX type checking where children are passed as tag content.
   children?: ReactNode;
 }
 
+// Define State interface for error tracking
 interface State {
   hasError: boolean;
   error: Error | null;
 }
 
-// Fix: Use React.Component to ensure that 'this.props' and 'this.state' are correctly typed and available within the class.
-class ErrorBoundary extends React.Component<Props, State> {
-  // Fix: Explicitly initializing state as a class property to ensure TypeScript visibility.
+// Inheriting explicitly from Component to ensure 'this.props' and 'this.state' are correctly defined and typed
+class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null
   };
 
-  // Fix: Explicit constructor to ensure props are correctly initialized in the base class.
-  constructor(props: Props) {
-    super(props);
-  }
-
+  // Lifecycle method to update state when an error occurs in child components
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
+  // Lifecycle method for logging error details
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("CRITICAL UI ERROR:", error, errorInfo);
   }
 
   public render(): ReactNode {
-    // Fix: Accessing props and state via 'this' which are now correctly inherited from React.Component.
+    // Correctly accessing props and state from the Component base class
     const { children } = this.props;
     const { hasError, error } = this.state;
 

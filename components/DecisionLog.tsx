@@ -15,7 +15,7 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
     return (
       <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] p-10 text-center">
         <i className="fa-solid fa-flask-vial text-3xl text-slate-300 mb-4"></i>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Log Wet-Lab results here to make NOVA smarter about the next test.</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Log results here to re-rank the roadmap.</p>
       </div>
     );
   }
@@ -54,9 +54,11 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[12px] font-black text-slate-900 tracking-tight">{entry.mutationTested}</span>
-                    <span className="text-[9px] font-bold text-slate-400">• {new Date(entry.timestamp).toLocaleDateString()}</span>
+                    <span className="text-[9px] font-bold text-slate-400">• pH {entry.environment.ph}</span>
                   </div>
-                  <p className="text-[10px] font-bold text-slate-500 truncate max-w-[180px]">{entry.assayType || 'Pending Assay'} • {entry.outcome === 'Not Tested Yet' ? 'No Feedback' : 'Feedback Received'}</p>
+                  <p className="text-[10px] font-bold text-slate-500 truncate max-w-[180px]">
+                    {entry.environment.temp}°C • {entry.environment.bufferSystem}
+                  </p>
                 </div>
               </div>
               
@@ -67,7 +69,7 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                   entry.outcome === 'Neutral' ? 'border-amber-200 text-amber-600 bg-amber-50' :
                   'border-slate-200 text-slate-300'
                 }`}>
-                  {entry.outcome === 'Not Tested Yet' ? 'Awaiting Lab' : entry.outcome}
+                  {entry.outcome === 'Not Tested Yet' ? 'Awaiting' : entry.outcome}
                 </span>
                 <i className={`fa-solid fa-chevron-down text-[10px] transition-transform duration-300 ${expandedId === entry.id ? 'rotate-180' : ''}`}></i>
               </div>
@@ -75,6 +77,17 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
 
             {expandedId === entry.id && (
               <div className="p-6 border-t-2 border-slate-50 space-y-6 bg-slate-50/40 animate-in fade-in slide-in-from-top-2">
+                <div className="grid grid-cols-2 gap-4 bg-white/50 p-4 rounded-2xl border border-slate-100 shadow-inner">
+                   <div>
+                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Environment Snapshot</span>
+                     <p className="text-[10px] font-bold text-slate-800">pH {entry.environment.ph} | {entry.environment.temp}°C | {entry.environment.ionicStrength}mM</p>
+                   </div>
+                   <div className="text-right">
+                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Goal at Simulation</span>
+                     <p className="text-[10px] font-bold text-slate-800">{entry.goal}</p>
+                   </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
@@ -87,31 +100,6 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                         <option value="">Select Assay...</option>
                         {ASSAY_TYPES.map(a => <option key={a} value={a}>{a}</option>)}
                       </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[9px] font-black uppercase text-slate-400 mb-1.5 tracking-widest">Cost Intensity</label>
-                        <select 
-                          value={entry.resourceIntensity || ''} 
-                          onChange={(e) => onUpdateEntry(entry.id, { resourceIntensity: e.target.value as any })}
-                          className="w-full bg-white border border-slate-200 py-2 px-3 rounded-xl text-[10px] font-bold outline-none"
-                        >
-                          <option value="">Intensity...</option>
-                          <option value="Low">Low</option>
-                          <option value="Medium">Medium</option>
-                          <option value="High">High</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-black uppercase text-slate-400 mb-1.5 tracking-widest">Duration</label>
-                        <input 
-                          type="text"
-                          value={entry.timeRequired || ''}
-                          onChange={(e) => onUpdateEntry(entry.id, { timeRequired: e.target.value })}
-                          placeholder="e.g. 7d"
-                          className="w-full bg-white border border-slate-200 py-2 px-3 rounded-xl text-[10px] font-bold outline-none"
-                        />
-                      </div>
                     </div>
                   </div>
 
@@ -136,22 +124,22 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Observations for NOVA Intelligence</label>
+                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Assay Feedback for NOVA</label>
                   <textarea 
                     value={entry.userNotes}
                     onChange={(e) => onUpdateEntry(entry.id, { userNotes: e.target.value })}
-                    placeholder="E.g. Observed fold change in fluorescence; high aggregation. (This will re-rank future roadmap items)"
+                    placeholder="Observations for re-ranking..."
                     className="w-full bg-white border border-slate-200 rounded-xl p-3 text-[11px] font-medium text-slate-900 outline-none focus:border-indigo-500 min-h-[80px] shadow-inner"
                   />
                 </div>
 
                 <div className="flex justify-between items-center pt-4 border-t border-slate-100">
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Data node: {entry.id}</span>
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Node ID: {entry.id}</span>
                   <button 
                     onClick={() => onRestore(entry)}
                     className="text-[9px] font-black text-indigo-600 uppercase hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all flex items-center gap-2"
                   >
-                    <i className="fa-solid fa-window-restore"></i> Restore This Simulation
+                    <i className="fa-solid fa-window-restore"></i> Full Restore
                   </button>
                 </div>
               </div>

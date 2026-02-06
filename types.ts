@@ -25,8 +25,11 @@ export interface ExperimentalPreset {
 
 export interface PriorResult {
   mutation: string;
-  outcome: 'Positive' | 'Neutral' | 'Negative';
+  outcome: 'Positive' | 'Neutral' | 'Negative' | 'Not Tested Yet';
   notes?: string;
+  assayType?: string;
+  resourceIntensity?: 'Low' | 'Medium' | 'High';
+  timeRequired?: string;
 }
 
 export interface Mutation {
@@ -58,7 +61,7 @@ export interface PredictionResult {
   mutation: string;
   deltaDeltaG: number; 
   stabilityImpact: 'Stabilizing' | 'Neutral' | 'Destabilizing' | 'Highly Destabilizing';
-  confidence: number; // This is the final Decision Confidence (Defensibility)
+  confidence: number; 
   regime: MutationRegime;
   patternAnchors: string[];
   signalConsistency: 'High Agreement' | 'Conflicting Signals' | 'Neutral';
@@ -84,6 +87,11 @@ export interface PredictionResult {
   functionalRegionSensitivity: 'High' | 'Medium' | 'Low';
   comparativeContext: string;
   benchmarkAlignments: BenchmarkAlignment[];
+  empiricalShift?: {
+    direction: 'Up' | 'Down' | 'Neutral';
+    magnitude: number;
+    reason: string;
+  };
 }
 
 export interface ReproducibilityMetadata {
@@ -129,6 +137,11 @@ export interface DecisionMemo {
   confidenceMode: 'Validated Reference Mode' | 'General Reasoning Mode';
   logInsights?: string;
   failureAwareNotes?: string;
+  learningProgress?: {
+    learnedPattern: string;
+    reRankedCount: number;
+    adjustedUncertainty: string;
+  };
 }
 
 export interface DecisionLogEntry {
@@ -146,6 +159,9 @@ export interface DecisionLogEntry {
   snapshots?: { full: string; zoomed: string };
   userNotes: string;
   outcome: 'Positive' | 'Neutral' | 'Negative' | 'Not Tested Yet';
+  assayType?: string;
+  resourceIntensity?: 'Low' | 'Medium' | 'High';
+  timeRequired?: string;
 }
 
 export interface SystemAuditTrail {

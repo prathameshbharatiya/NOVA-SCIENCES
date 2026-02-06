@@ -2,7 +2,8 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 
 interface Props {
-  children: ReactNode;
+  // Fix: Make children optional to satisfy JSX type checking where children are passed as tag content.
+  children?: ReactNode;
 }
 
 interface State {
@@ -10,12 +11,18 @@ interface State {
   error: Error | null;
 }
 
-// Ensure the class correctly extends React.Component with explicitly defined Props and State.
+// Fix: Use React.Component to ensure that 'this.props' and 'this.state' are correctly typed and available within the class.
 class ErrorBoundary extends React.Component<Props, State> {
+  // Fix: Explicitly initializing state as a class property to ensure TypeScript visibility.
   public state: State = {
     hasError: false,
     error: null
   };
+
+  // Fix: Explicit constructor to ensure props are correctly initialized in the base class.
+  constructor(props: Props) {
+    super(props);
+  }
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -25,8 +32,8 @@ class ErrorBoundary extends React.Component<Props, State> {
     console.error("CRITICAL UI ERROR:", error, errorInfo);
   }
 
-  public render() {
-    // Destructure children from this.props to ensure the property is correctly accessed within the render context.
+  public render(): ReactNode {
+    // Fix: Accessing props and state via 'this' which are now correctly inherited from React.Component.
     const { children } = this.props;
     const { hasError, error } = this.state;
 

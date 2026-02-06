@@ -1,4 +1,4 @@
-import { ExperimentalPreset } from "./types";
+import { ExperimentalPreset, Mutation } from "./types";
 
 export const AMINO_ACIDS = [
   'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y'
@@ -20,6 +20,7 @@ export interface ReferenceProtein {
   pdbId: string;
   icon: string;
   context: string;
+  canonicalMutation?: Mutation;
 }
 
 export const REFERENCE_PROTEINS: ReferenceProtein[] = [
@@ -30,7 +31,8 @@ export const REFERENCE_PROTEINS: ReferenceProtein[] = [
     why: 'Mutation-dense tumor suppressor with well-characterized structure–function trade-offs.',
     pdbId: '1TUP',
     icon: 'fa-dna',
-    context: 'Highly sensitive in the DNA-binding domain; well-documented stability-function trade-offs.'
+    context: 'Highly sensitive in the DNA-binding domain; well-documented stability-function trade-offs.',
+    canonicalMutation: { wildtype: 'R', position: 273, mutant: 'H' }
   },
   { 
     id: 'Q00987', 
@@ -39,7 +41,8 @@ export const REFERENCE_PROTEINS: ReferenceProtein[] = [
     why: 'Key oncology target; binding interface with p53 is a primary site for therapeutic engineering.',
     pdbId: '4IPF',
     icon: 'fa-virus-slash',
-    context: 'Requires precise binding pocket geometry; sensitive hydrophobic surface residues.'
+    context: 'Requires precise binding pocket geometry; sensitive hydrophobic surface residues.',
+    canonicalMutation: { wildtype: 'F', position: 19, mutant: 'A' }
   },
   { 
     id: 'P42212', 
@@ -48,7 +51,8 @@ export const REFERENCE_PROTEINS: ReferenceProtein[] = [
     why: 'The standard for engineering brightness and spectral properties; robust beta-barrel structure.',
     pdbId: '1GFL',
     icon: 'fa-sun',
-    context: 'Core chromophore environment is highly sensitive to side-chain orientation within the beta-barrel.'
+    context: 'Core chromophore environment is highly sensitive to side-chain orientation within the beta-barrel.',
+    canonicalMutation: { wildtype: 'S', position: 65, mutant: 'T' }
   },
   { 
     id: 'P0DTC2', 
@@ -57,7 +61,8 @@ export const REFERENCE_PROTEINS: ReferenceProtein[] = [
     why: 'Critical for vaccine and antibody engineering; large, complex trimeric structure.',
     pdbId: '6VXX',
     icon: 'fa-microbe',
-    context: 'Large surface area with critical RBD stability required for antibody affinity.'
+    context: 'Large surface area with critical RBD stability required for antibody affinity.',
+    canonicalMutation: { wildtype: 'N', position: 501, mutant: 'Y' }
   },
   { 
     id: 'P01116', 
@@ -66,6 +71,7 @@ export const REFERENCE_PROTEINS: ReferenceProtein[] = [
     why: 'Common driver of cancer; switch regions are critical for signaling and inhibitor binding.',
     pdbId: '4OBE',
     icon: 'fa-flask-vial',
-    context: 'Dynamics of Switch I and II are extremely sensitive to mutations near the nucleotide binding site.'
+    context: 'Dynamics of Switch I and II are extremely sensitive to mutations near the nucleotide binding site.',
+    canonicalMutation: { wildtype: 'G', position: 12, mutant: 'D' }
   }
 ];

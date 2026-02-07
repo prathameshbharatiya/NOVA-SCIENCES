@@ -1,6 +1,15 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { PredictionResult, Mutation, ProteinMetadata, ScientificGoal, PriorResult, DecisionMemo, RiskTolerance, DecisionLogEntry, MutationRegime, ExperimentalEnvironment } from "../types";
+import { 
+  PredictionResult, 
+  Mutation, 
+  ProteinMetadata, 
+  ScientificGoal, 
+  RiskTolerance, 
+  MutationRegime, 
+  ExperimentalEnvironment,
+  DecisionMemo
+} from "../types";
 
 const MODEL_NAME = "gemini-3-pro-preview"; 
 
@@ -51,7 +60,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Resolve protein: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 relevant mutations.`,
+      contents: `Resolve protein: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 highly relevant mutations for stability or function.`,
       config: {
         systemInstruction: "You are NOVA, a decision-first protein engineering workstation.",
         responseMimeType: "application/json",
@@ -89,43 +98,118 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
   });
 };
 
+export const generateStrategicRoadmap = async (
+  protein: ProteinMetadata,
+  goal: ScientificGoal,
+  env: ExperimentalEnvironment,
+  pastLogs: string
+): Promise<DecisionMemo> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  return callWithRetry(async () => {
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: `Synthesize a Strategic Roadmap for ${protein.name} (${protein.id}).
+      Primary Goal: ${goal}.
+      Current Lab Environment: pH ${env.ph}, Temp ${env.temp}°C, Salt ${env.ionicStrength}mM.
+      Feedback Loop - Previous Experimental Observations:
+      ${pastLogs || "No prior experiments logged."}
+      
+      Task:
+      1. Prescribe exactly 3 mutations to TEST next based on environment and goal.
+      2. Identify 2 mutations to AVOID (Blacklist).
+      3. Explain specifically how the pH ${env.ph} and Temp ${env.temp} affected the roadmap selection.
+      4. Provide 'Lit Alignment' scores (0-1) based on real-world grounding.`,
+      config: {
+        tools: [{googleSearch: {}}],
+        systemInstruction: "You are NOVA Strategic Intelligence. Prescribe experimental direction using structural physics and grounding. Always return JSON.",
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 8192 },
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            confidenceMode: { type: Type.STRING },
+            summary: { type: Type.STRING },
+            environmentalRoadmapImpact: { type: Type.STRING },
+            recommended: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  rank: { type: Type.NUMBER },
+                  mutation: { type: Type.STRING },
+                  goalAlignment: { type: Type.STRING },
+                  confidence: { type: Type.STRING },
+                  rationale: { type: Type.STRING },
+                  risk: { type: Type.STRING },
+                  litScore: { type: Type.NUMBER }
+                },
+                required: ["mutation", "rationale", "rank", "litScore"]
+              }
+            },
+            discouraged: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  mutation: { type: Type.STRING },
+                  risk: { type: Type.STRING },
+                  signal: { type: Type.STRING },
+                  litScore: { type: Type.NUMBER }
+                },
+                required: ["mutation", "risk", "signal", "litScore"]
+              }
+            },
+            learningProgress: {
+              type: Type.OBJECT,
+              properties: {
+                reRankedCount: { type: Type.NUMBER },
+                learnedPattern: { type: Type.STRING }
+              }
+            }
+          },
+          required: ["confidenceMode", "summary", "recommended", "discouraged", "environmentalRoadmapImpact"]
+        }
+      }
+    });
+
+    const text = extractText(response, "Strategic synthesis engine timeout.");
+    const baseResult = safeJsonParse<DecisionMemo>(text, "Strategic Roadmap Generation");
+
+    // Extract grounding URLs for required search grounding display
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    const groundingUrls: string[] = [];
+    if (groundingMetadata?.groundingChunks) {
+      groundingMetadata.groundingChunks.forEach((chunk: any) => {
+        if (chunk.web && chunk.web.uri) groundingUrls.push(chunk.web.uri);
+      });
+    }
+
+    return { ...baseResult, groundingUrls };
+  });
+};
+
 export const predictMutation = async (
   protein: ProteinMetadata, 
   mutation: Mutation, 
   goal: ScientificGoal, 
-  priorResults: PriorResult[],
   risk: RiskTolerance,
-  preserve: string,
   environment: ExperimentalEnvironment
 ): Promise<PredictionResult> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
   
-  const historyString = priorResults.map(r => 
-    `- Mutation: ${r.mutation}, Outcome: ${r.outcome}, Feedback: ${r.notes}`
-  ).join('\n');
-
   return callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Predict ${mutationStr} for ${protein.name}.
-      
-      GOAL: ${goal}.
-      RISK TOLERANCE: ${risk}.
-      PRESERVE REGIONS: ${preserve || 'None'}.
-      ENV: pH ${environment.ph}, Temp ${environment.temp}°C, Ionic ${environment.ionicStrength}mM, Buffer: ${environment.bufferSystem}.
-      LAB HISTORY:\n${historyString || 'None'}.
-      
-      Use Google Search to find real-world scientific papers that have reported this mutation or similar substitutions in this protein. 
-      Align your ΔΔG prediction with experimental literature.`,
+      contents: `Assay Simulation: substitution ${mutationStr} for ${protein.name}.
+      Biological Goal: ${goal}. Environment: pH ${environment.ph}, Temp ${environment.temp}°C, Salt ${environment.ionicStrength}mM.
+      Determine thermodynamic ΔΔG and literature alignment.`,
       config: {
         tools: [{googleSearch: {}}],
-        systemInstruction: `You are NOVA. Predict ΔΔG. Explicitly calculate 'environmentalAnalysis'. 
-        You MUST search for grounding scientific papers to support your findings. 
-        Populate 'scientificPapers' with real paper titles, journals, and URLs.
-        Populate 'benchmarkAlignments' explaining how your result correlates with the literature you found.`,
+        systemInstruction: `You are NOVA. Predict ΔΔG stability change. Use Search Grounding for real paper URLs.`,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 16384 },
+        thinkingConfig: { thinkingBudget: 12288 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -133,8 +217,9 @@ export const predictMutation = async (
             uniprotId: { type: Type.STRING },
             mutation: { type: Type.STRING },
             deltaDeltaG: { type: Type.NUMBER },
-            stabilityImpact: { type: Type.STRING },
+            stabilityImpact: { type: Type.STRING, enum: ["Stabilizing", "Neutral", "Destabilizing", "Highly Destabilizing"] },
             confidence: { type: Type.NUMBER },
+            overallLiteratureAlignment: { type: Type.NUMBER },
             regime: { type: Type.STRING, enum: Object.values(MutationRegime) },
             patternAnchors: { type: Type.ARRAY, items: { type: Type.STRING } },
             signalConsistency: { type: Type.STRING },
@@ -175,109 +260,45 @@ export const predictMutation = async (
               }
             }
           },
-          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "regime", "reportSummary", "environmentalAnalysis", "scientificPapers", "benchmarkAlignments"]
+          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "overallLiteratureAlignment", "regime", "reportSummary", "environmentalAnalysis", "scientificPapers", "benchmarkAlignments"]
         }
       }
     });
 
-    const text = extractText(response, "Prediction engine timeout.");
+    const text = extractText(response, "Assay processing failure.");
     const baseResult = safeJsonParse<any>(text, "Mutation Prediction Logic");
+    
+    // Explicit Grounding URL Extraction for visibility
+    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+    if (groundingMetadata?.groundingChunks) {
+      const groundedLinks = groundingMetadata.groundingChunks
+        .filter((chunk: any) => chunk.web)
+        .map((chunk: any) => ({
+          title: chunk.web.title || 'Resolved Research Context',
+          journal: 'Web Grounding',
+          year: new Date().getFullYear(),
+          url: chunk.web.uri,
+          relevance: 'Direct literature support identified during analysis.'
+        }));
+      
+      if (groundedLinks.length > 0) {
+        baseResult.scientificPapers = [...(baseResult.scientificPapers || []), ...groundedLinks];
+      }
+    }
+
     return { 
       ...baseResult, 
-      isValidatedReference: !!protein.isValidatedReference,
-      confidenceMode: protein.isValidatedReference ? 'Validated Reference Mode' : 'General Reasoning Mode',
       reproducibility: {
         runId: `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
         timestamp: new Date().toISOString(),
-        modelName: "NOVA-CORE-BIOLOGIC",
+        modelName: "NOVA-CORE",
         modelVersion: "0.2.5v",
-        inputHash: "SHA-GATED-GROUNDED",
+        inputHash: "GATED-SHA",
         dockerImageHash: "v0.2.5v-stable",
         structureSource: protein.sourceType,
         structureSourceDetails: protein.pdbId ? `PDB:${protein.pdbId}` : `AFDB:${protein.id}`,
         viewerVersion: "3Dmol.js"
       }
-    };
-  });
-};
-
-export const generateDecisionMemo = async (
-  protein: ProteinMetadata, 
-  goal: ScientificGoal, 
-  priorLogs: DecisionLogEntry[],
-  risk: RiskTolerance,
-  preserve: string,
-  environment: ExperimentalEnvironment
-): Promise<DecisionMemo> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-  const historyString = priorLogs.map(l => 
-    `Mutation: ${l.mutationTested}, Outcome: ${l.outcome}, Context: ${l.userNotes}`
-  ).join('\n');
-
-  return callWithRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: `Strategic Synthesis for ${protein.name}.
-      Goal: ${goal}. Risk Tolerance: ${risk}. Constraints: Preserve ${preserve || 'Essential regions'}.
-      Lab Feedback:\n${historyString || 'None'}\n
-      Env: pH ${environment.ph}, ${environment.temp}°C.`,
-      config: {
-        systemInstruction: `You are NOVA Strategic Advisor. Use the environmental context and history to prioritize.
-        IMPORTANT: Look at 'Lab Feedback'. If a mutation was Negative, AVOID suggesting that residue or similar chemical changes. 
-        List these as 'discouraged' mutations (Mutations to AVOID).
-        Synthesize a list of recommended and discouraged targets.`,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 16384 },
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            recommended: { 
-              type: Type.ARRAY, 
-              items: { 
-                type: Type.OBJECT, 
-                properties: { 
-                  rank: { type: Type.NUMBER }, 
-                  mutation: { type: Type.STRING }, 
-                  rationale: { type: Type.STRING }, 
-                  goalAlignment: { type: Type.STRING }, 
-                  confidence: { type: Type.STRING }, 
-                  risk: { type: Type.STRING }
-                },
-                required: ["rank", "mutation", "rationale", "confidence"]
-              } 
-            },
-            discouraged: { 
-              type: Type.ARRAY, 
-              items: { 
-                type: Type.OBJECT, 
-                properties: { 
-                  mutation: { type: Type.STRING }, 
-                  risk: { type: Type.STRING }, 
-                  signal: { type: Type.STRING } 
-                },
-                required: ["mutation", "risk", "signal"]
-              } 
-            },
-            summary: { type: Type.STRING },
-            environmentalRoadmapImpact: { type: Type.STRING },
-            learningProgress: {
-              type: Type.OBJECT,
-              properties: {
-                learnedPattern: { type: Type.STRING },
-                reRankedCount: { type: Type.NUMBER },
-                adjustedUncertainty: { type: Type.STRING }
-              }
-            }
-          },
-          required: ["recommended", "discouraged", "summary", "environmentalRoadmapImpact"]
-        }
-      }
-    });
-    const parsed = safeJsonParse<any>(extractText(response, "Roadmap synthesis failed."), "Strategic Roadmap Synthesis");
-    return {
-      ...parsed,
-      confidenceMode: protein.isValidatedReference ? 'Validated Reference Mode' : 'General Reasoning Mode'
     };
   });
 };

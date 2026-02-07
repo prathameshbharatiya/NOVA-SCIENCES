@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { DecisionLogEntry } from '../types';
 
@@ -5,17 +6,16 @@ interface DecisionLogProps {
   entries: DecisionLogEntry[];
   onUpdateEntry: (id: string, updates: Partial<DecisionLogEntry>) => void;
   onRestore: (entry: DecisionLogEntry) => void;
-  isSyncing?: boolean;
 }
 
-const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRestore, isSyncing }) => {
+const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRestore }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (entries.length === 0) {
     return (
       <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2.5rem] p-10 text-center">
         <i className="fa-solid fa-flask-vial text-3xl text-slate-300 mb-4"></i>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Log results here to re-rank the roadmap.</p>
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Experimental history appears here.</p>
       </div>
     );
   }
@@ -24,123 +24,84 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between px-2">
-        <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-900 flex items-center gap-2">
-          <i className="fa-solid fa-microscope text-indigo-500"></i> Feedback Loop History
-        </h3>
-        {isSyncing && (
-          <span className="text-[9px] font-black text-indigo-600 uppercase animate-pulse flex items-center gap-2">
-            <i className="fa-solid fa-rotate"></i> Learning...
-          </span>
-        )}
-      </div>
-      
+      <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-900 flex items-center gap-2 px-2">
+        <i className="fa-solid fa-history text-indigo-500"></i> Assay Notebook
+      </h3>
       <div className="space-y-3">
         {entries.map((entry) => (
           <div key={entry.id} className="bg-white border-2 border-slate-100 rounded-[2rem] overflow-hidden shadow-sm transition-all hover:shadow-md">
-            <div 
-              className="p-5 flex items-center justify-between cursor-pointer group"
-              onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-            >
+            <div className="p-5 flex items-center justify-between cursor-pointer" onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}>
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black shadow-inner ${
                   entry.outcome === 'Positive' ? 'bg-emerald-100 text-emerald-600' :
                   entry.outcome === 'Negative' ? 'bg-rose-100 text-rose-600' :
-                  entry.outcome === 'Neutral' ? 'bg-amber-100 text-amber-600' :
                   'bg-slate-100 text-slate-400'
                 }`}>
                   {entry.mutationTested.substring(0, 1)}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-black text-slate-900 tracking-tight">{entry.mutationTested}</span>
-                    <span className="text-[9px] font-bold text-slate-400">• pH {entry.environment.ph}</span>
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-500 truncate max-w-[180px]">
-                    {entry.environment.temp}°C • {entry.environment.bufferSystem}
-                  </p>
+                  <div className="text-[12px] font-black text-slate-900">{entry.mutationTested}</div>
+                  <div className="text-[9px] font-bold text-slate-400 uppercase">{entry.proteinName}</div>
                 </div>
               </div>
-              
-              <div className="flex items-center gap-4">
-                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border-2 ${
-                  entry.outcome === 'Positive' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' :
-                  entry.outcome === 'Negative' ? 'border-rose-200 text-rose-600 bg-rose-50' :
-                  entry.outcome === 'Neutral' ? 'border-amber-200 text-amber-600 bg-amber-50' :
-                  'border-slate-200 text-slate-300'
-                }`}>
-                  {entry.outcome === 'Not Tested Yet' ? 'Awaiting' : entry.outcome}
-                </span>
-                <i className={`fa-solid fa-chevron-down text-[10px] transition-transform duration-300 ${expandedId === entry.id ? 'rotate-180' : ''}`}></i>
+              <div className="flex items-center gap-3">
+                 <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border ${
+                    entry.outcome === 'Positive' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' :
+                    entry.outcome === 'Negative' ? 'border-rose-200 text-rose-600 bg-rose-50' :
+                    'border-slate-200 text-slate-300'
+                 }`}>
+                   {entry.outcome === 'Not Tested Yet' ? 'Logged' : entry.outcome}
+                 </span>
+                 <i className={`fa-solid fa-chevron-down text-[10px] transition-transform ${expandedId === entry.id ? 'rotate-180' : ''}`}></i>
               </div>
             </div>
-
             {expandedId === entry.id && (
-              <div className="p-6 border-t-2 border-slate-50 space-y-6 bg-slate-50/40 animate-in fade-in slide-in-from-top-2">
-                <div className="grid grid-cols-2 gap-4 bg-white/50 p-4 rounded-2xl border border-slate-100 shadow-inner">
+              <div className="p-6 border-t-2 border-slate-50 space-y-4 bg-slate-50/40">
+                <div className="grid grid-cols-2 gap-4">
                    <div>
-                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Environment Snapshot</span>
-                     <p className="text-[10px] font-bold text-slate-800">pH {entry.environment.ph} | {entry.environment.temp}°C | {entry.environment.ionicStrength}mM</p>
-                   </div>
-                   <div className="text-right">
-                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block">Goal at Simulation</span>
-                     <p className="text-[10px] font-bold text-slate-800">{entry.goal}</p>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-[9px] font-black uppercase text-slate-400 mb-1.5 tracking-widest">Assay Methodology</label>
+                      <label className="block text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Assay Type</label>
                       <select 
                         value={entry.assayType || ''} 
                         onChange={(e) => onUpdateEntry(entry.id, { assayType: e.target.value })}
-                        className="w-full bg-white border border-slate-200 py-2 px-3 rounded-xl text-[10px] font-bold outline-none focus:border-indigo-500"
+                        className="w-full bg-white border border-slate-200 py-2 px-3 rounded-xl text-[10px] font-bold"
                       >
                         <option value="">Select Assay...</option>
                         {ASSAY_TYPES.map(a => <option key={a} value={a}>{a}</option>)}
                       </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="block text-[9px] font-black uppercase text-slate-400 mb-1.5 tracking-widest">Scientific Outcome</label>
-                    <div className="flex flex-wrap gap-2">
-                      {['Positive', 'Neutral', 'Negative', 'Not Tested Yet'].map((opt) => (
-                        <button 
-                          key={opt}
-                          onClick={() => onUpdateEntry(entry.id, { outcome: opt as any })}
-                          className={`flex-1 min-w-[80px] px-3 py-2 rounded-xl text-[9px] font-black transition-all border-2 ${
-                            entry.outcome === opt 
-                            ? 'bg-[#0f172a] text-white border-[#0f172a] shadow-md' 
-                            : 'bg-white text-slate-600 border-slate-100 hover:border-slate-300'
-                          }`}
-                        >
-                          {opt === 'Not Tested Yet' ? 'Logged' : opt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                   </div>
+                   <div>
+                      <label className="block text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Outcome Result</label>
+                      <div className="flex gap-1">
+                        {['Positive', 'Neutral', 'Negative'].map(opt => (
+                          <button 
+                            key={opt}
+                            onClick={() => onUpdateEntry(entry.id, { outcome: opt as any })}
+                            className={`flex-1 py-1 text-[8px] font-black rounded border transition-all ${entry.outcome === opt ? 'bg-[#0f172a] text-white border-[#0f172a]' : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-300'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                   </div>
+                </div>
+                
+                <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[9px] font-bold text-indigo-700">
+                  <div className="uppercase text-[7px] text-indigo-400 mb-1 tracking-widest">Environment Recorded</div>
+                  pH ${entry.environment.ph} | ${entry.environment.temp}°C | ${entry.environment.ionicStrength}mM | ${entry.environment.bufferSystem}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Assay Feedback for NOVA</label>
+                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Scientist Notes</label>
                   <textarea 
                     value={entry.userNotes}
                     onChange={(e) => onUpdateEntry(entry.id, { userNotes: e.target.value })}
-                    placeholder="Observations for re-ranking..."
-                    className="w-full bg-white border border-slate-200 rounded-xl p-3 text-[11px] font-medium text-slate-900 outline-none focus:border-indigo-500 min-h-[80px] shadow-inner"
+                    placeholder="Enter lab observations or experimental feedback..."
+                    className="w-full bg-white border border-slate-200 rounded-xl p-3 text-[11px] font-medium outline-none min-h-[80px] focus:border-indigo-300 transition-all"
                   />
                 </div>
-
                 <div className="flex justify-between items-center pt-4 border-t border-slate-100">
-                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Node ID: {entry.id}</span>
-                  <button 
-                    onClick={() => onRestore(entry)}
-                    className="text-[9px] font-black text-indigo-600 uppercase hover:bg-indigo-50 px-4 py-2 rounded-xl transition-all flex items-center gap-2"
-                  >
-                    <i className="fa-solid fa-window-restore"></i> Full Restore
-                  </button>
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{new Date(entry.timestamp).toLocaleDateString()}</span>
+                  <button onClick={() => onRestore(entry)} className="text-[9px] font-black text-indigo-600 uppercase hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors">Restore Environment & Coordinates</button>
                 </div>
               </div>
             )}

@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 // Define Props interface with optional children to match React.Component's expected structure
@@ -12,8 +11,12 @@ interface State {
   error: Error | null;
 }
 
-// Inheriting explicitly from Component to ensure 'this.props' and 'this.state' are correctly defined and typed
+/**
+ * ErrorBoundary component to catch and handle runtime errors in the component tree.
+ * Inheriting from Component ensures props and state are correctly typed.
+ */
 class ErrorBoundary extends Component<Props, State> {
+  // Initializing state as a class field
   public state: State = {
     hasError: false,
     error: null
@@ -30,7 +33,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Correctly accessing props and state from the Component base class
+    // Correctly accessing this.props from the React.Component base class
     const { children } = this.props;
     const { hasError, error } = this.state;
 

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { DecisionMemo as DecisionMemoType, ScientificGoal } from '../types';
 
@@ -101,7 +102,7 @@ const DecisionMemo: React.FC<DecisionMemoProps> = ({ memo, goal, onSelectMutatio
            </div>
            <div>
               <h3 className="text-2xl font-black text-rose-600 uppercase tracking-tight">Critical Blacklist: DO NOT TRY</h3>
-              <p className="text-[11px] font-black uppercase text-rose-400 tracking-[0.2em]">Exclued due to predicted structural collapse or functional ablation</p>
+              <p className="text-[11px] font-black uppercase text-rose-400 tracking-[0.2em]">Excluded due to predicted structural collapse or functional ablation</p>
            </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

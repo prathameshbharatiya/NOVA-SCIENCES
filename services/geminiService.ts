@@ -61,11 +61,10 @@ const extractGroundingUrls = (response: GenerateContentResponse): string[] => {
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
   return callWithRetry(async () => {
-    // Initialize client within the function to ensure the correct context for each call
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Resolve protein: "${query}". Provide UniProt/PDB IDs. Suggest 6 mutations for oncology/biotech.`,
+      contents: `Resolve protein: "${query}". Provide UniProt/PDB IDs. Suggest 6 mutations for oncology/biotech research.`,
       config: {
         systemInstruction: "You are NOVA, a world-class structural bioinformatician. Respond with JSON.",
         responseMimeType: "application/json",
@@ -111,10 +110,16 @@ export const generateStrategicRoadmap = async (
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Strategic Roadmap: ${protein.name} (${protein.id}). Goal: ${goal}. Environment: pH ${env.ph}, Temp ${env.temp}°C. Context: ${pastLogs || "None"}.`,
+      contents: `Strategic Roadmap for ${protein.name} (${protein.id}). 
+      Goal: ${goal}. 
+      Environment: pH ${env.ph}, Temp ${env.temp}°C. 
+      Context: ${pastLogs || "None"}.
+      
+      CRITICAL INSTRUCTION: Identify exactly 3 high-priority mutations to TRY and 3 high-risk mutations to AVOID. 
+      For EACH mutation, provide a detailed structural rationale (e.g., 'disrupts hydrophobic core packing', 'introduces steric clash with DNA interface').`,
       config: {
         tools: [{googleSearch: {}}],
-        systemInstruction: "You are NOVA Strategic Intelligence. Recommend priority mutations based on thermodynamic physics. Respond with JSON.",
+        systemInstruction: "You are NOVA Strategic Intelligence. Recommend specific mutations to TRY vs AVOID based on thermodynamic physics and structural biology. Respond with JSON.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -178,7 +183,10 @@ export const predictMutation = async (
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Predict ΔΔG for ${mutationStr} in ${protein.name}. Condition: pH ${environment.ph}, Temp ${environment.temp}°C.`,
+      contents: `Predict ΔΔG for mutation ${mutationStr} in ${protein.name} (${protein.id}). 
+      Goal: ${goal}. 
+      Environment: pH ${environment.ph}, Temp ${environment.temp}°C.
+      Explain the thermodynamic impact and cite relevant structural biology patterns.`,
       config: {
         tools: [{googleSearch: {}}],
         systemInstruction: "You are NOVA. Provide precise ΔΔG and literature alignment. Respond with JSON.",

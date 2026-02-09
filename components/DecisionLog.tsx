@@ -33,8 +33,9 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
             <div className="p-5 flex items-center justify-between cursor-pointer" onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}>
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black shadow-inner ${
-                  entry.outcome === 'Positive' ? 'bg-emerald-100 text-emerald-600' :
-                  entry.outcome === 'Negative' ? 'bg-rose-100 text-rose-600' :
+                  entry.outcome === 'Success' ? 'bg-emerald-100 text-emerald-600' :
+                  entry.outcome === 'Fail' ? 'bg-rose-100 text-rose-600' :
+                  entry.outcome === 'Partial' ? 'bg-amber-100 text-amber-600' :
                   'bg-slate-100 text-slate-400'
                 }`}>
                   {entry.mutationTested.substring(0, 1)}
@@ -46,8 +47,8 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
               </div>
               <div className="flex items-center gap-3">
                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border ${
-                    entry.outcome === 'Positive' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' :
-                    entry.outcome === 'Negative' ? 'border-rose-200 text-rose-600 bg-rose-50' :
+                    entry.outcome === 'Success' ? 'border-emerald-200 text-emerald-600 bg-emerald-50' :
+                    entry.outcome === 'Fail' ? 'border-rose-200 text-rose-600 bg-rose-50' :
                     'border-slate-200 text-slate-300'
                  }`}>
                    {entry.outcome === 'Not Tested Yet' ? 'Logged' : entry.outcome}
@@ -70,9 +71,9 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                       </select>
                    </div>
                    <div>
-                      <label className="block text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Outcome Result</label>
+                      <label className="block text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Outcome</label>
                       <div className="flex gap-1">
-                        {['Positive', 'Neutral', 'Negative'].map(opt => (
+                        {['Success', 'Partial', 'Fail'].map(opt => (
                           <button 
                             key={opt}
                             onClick={() => onUpdateEntry(entry.id, { outcome: opt as any })}
@@ -83,6 +84,29 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                         ))}
                       </div>
                    </div>
+                   <div>
+                      <label className="block text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Resource Cost</label>
+                      <select 
+                        value={entry.resourceIntensity || ''} 
+                        onChange={(e) => onUpdateEntry(entry.id, { resourceIntensity: e.target.value as any })}
+                        className="w-full bg-white border border-slate-200 py-2 px-3 rounded-xl text-[10px] font-bold"
+                      >
+                        <option value="">Select Intensity...</option>
+                        <option value="Low">Low</option>
+                        <option value="Medium">Medium</option>
+                        <option value="High">High</option>
+                      </select>
+                   </div>
+                   <div>
+                      <label className="block text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Time Required</label>
+                      <input 
+                        type="text"
+                        value={entry.timeRequired || ''}
+                        placeholder="e.g. 4h, 2d"
+                        onChange={(e) => onUpdateEntry(entry.id, { timeRequired: e.target.value })}
+                        className="w-full bg-white border border-slate-200 py-2 px-3 rounded-xl text-[10px] font-bold"
+                      />
+                   </div>
                 </div>
                 
                 <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[9px] font-bold text-indigo-700">
@@ -91,17 +115,17 @@ const DecisionLog: React.FC<DecisionLogProps> = ({ entries, onUpdateEntry, onRes
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Scientist Notes</label>
+                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-widest">Experimental Notes</label>
                   <textarea 
                     value={entry.userNotes}
                     onChange={(e) => onUpdateEntry(entry.id, { userNotes: e.target.value })}
-                    placeholder="Enter lab observations or experimental feedback..."
+                    placeholder="Enter lab observations..."
                     className="w-full bg-white border border-slate-200 rounded-xl p-3 text-[11px] font-medium outline-none min-h-[80px] focus:border-indigo-300 transition-all"
                   />
                 </div>
                 <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{new Date(entry.timestamp).toLocaleDateString()}</span>
-                  <button onClick={() => onRestore(entry)} className="text-[9px] font-black text-indigo-600 uppercase hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors">Restore Environment & Coordinates</button>
+                  <button onClick={() => onRestore(entry)} className="text-[9px] font-black text-indigo-600 uppercase hover:bg-indigo-50 px-3 py-1 rounded-lg transition-colors">Restore Coordinates</button>
                 </div>
               </div>
             )}

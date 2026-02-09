@@ -1,3 +1,4 @@
+
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 // Define Props interface with optional children to match React.Component's expected structure
@@ -13,14 +14,18 @@ interface State {
 
 /**
  * ErrorBoundary component to catch and handle runtime errors in the component tree.
- * Inheriting from Component ensures props and state are correctly typed.
  */
-class ErrorBoundary extends Component<Props, State> {
-  // Initializing state as a class field
+// Use React.Component explicitly to ensure TypeScript correctly resolves inherited properties like 'props'
+class ErrorBoundary extends React.Component<Props, State> {
+  // Explicitly declare state property to ensure visibility and type safety
   public state: State = {
     hasError: false,
     error: null
   };
+
+  constructor(props: Props) {
+    super(props);
+  }
 
   // Lifecycle method to update state when an error occurs in child components
   public static getDerivedStateFromError(error: Error): State {
@@ -33,11 +38,8 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Correctly accessing this.props from the React.Component base class
-    const { children } = this.props;
-    const { hasError, error } = this.state;
-
-    if (hasError) {
+    // Access state and props via 'this' to handle runtime errors gracefully
+    if (this.state.hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center p-10 bg-slate-50 text-center">
           <div className="w-24 h-24 bg-rose-100 text-rose-600 rounded-[2rem] flex items-center justify-center mb-8 text-4xl shadow-2xl shadow-rose-200 animate-bounce">
@@ -50,7 +52,7 @@ class ErrorBoundary extends Component<Props, State> {
           <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 text-left mb-10 w-full max-w-2xl shadow-inner group transition-all">
             <div className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-widest">Stack Trace / Debug Log</div>
             <code className="text-xs text-rose-500 font-mono leading-relaxed block overflow-auto max-h-60 custom-scrollbar">
-              {error?.stack || error?.toString()}
+              {this.state.error?.stack || this.state.error?.toString()}
             </code>
           </div>
           <div className="flex gap-4">
@@ -74,7 +76,8 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return children;
+    // Explicitly return children from props; inheritance from React.Component provides the 'props' property
+    return this.props.children;
   }
 }
 

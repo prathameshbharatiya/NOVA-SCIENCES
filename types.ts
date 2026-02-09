@@ -1,5 +1,4 @@
 
-
 export enum ScientificGoal {
   STABILITY = 'Stability Improvement',
   BINDING = 'Binding/Interface Optimization',
@@ -51,6 +50,13 @@ export interface Mutation {
   wildtype: string;
   position: number;
   mutant: string;
+}
+
+export interface EnergyBreakdown {
+  vanDerWaals: number;
+  electrostatics: number;
+  hBonds: number;
+  solvation: number;
 }
 
 export interface BenchmarkAlignment {
@@ -110,6 +116,7 @@ export interface PredictionResult {
   benchmarkAlignments: BenchmarkAlignment[];
   reproducibility: ReproducibilityMetadata;
   environmentalAnalysis?: EnvironmentalImpact;
+  energyBreakdown?: EnergyBreakdown;
 }
 
 export interface ReproducibilityMetadata {
@@ -140,7 +147,10 @@ export interface DecisionLogEntry {
   prediction?: PredictionResult;
   userNotes: string;
   assayType?: string;
-  outcome: 'Positive' | 'Neutral' | 'Negative' | 'Not Tested Yet';
+  timeRequired?: string; // hours/days
+  resourceIntensity?: 'Low' | 'Medium' | 'High';
+  outcome: 'Success' | 'Partial' | 'Fail' | 'Not Tested Yet';
+  numericScore?: number;
   environment: ExperimentalEnvironment;
 }
 

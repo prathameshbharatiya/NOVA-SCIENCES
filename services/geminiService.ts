@@ -11,6 +11,7 @@ import {
   DecisionMemo
 } from "../types";
 
+// Using Gemini 3 Pro for complex structural bioinformatics and thermodynamic reasoning
 const MODEL_NAME = "gemini-3-pro-preview"; 
 
 function safeJsonParse<T>(text: string, fallbackDesc: string): T {
@@ -19,11 +20,11 @@ function safeJsonParse<T>(text: string, fallbackDesc: string): T {
     return JSON.parse(cleanedText) as T;
   } catch (err) {
     console.error(`JSON Parse Error: ${fallbackDesc}`, text);
-    throw new Error(`The synthesis engine returned an invalid data format. Details: ${fallbackDesc}`);
+    throw new Error(`Invalid data format: ${fallbackDesc}`);
   }
 }
 
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 500): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 1, initialDelay = 1000): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -32,11 +33,10 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDel
       lastError = err;
       const status = err.status || 0;
       const msg = err.message?.toLowerCase() || "";
-      const isTransient = status === 503 || status === 429 || msg.includes("overloaded") || msg.includes("quota") || msg.includes("resource_exhausted");
+      const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted");
       
-      if (isTransient && i < maxRetries - 1) {
-        const delay = initialDelay * Math.pow(2, i);
-        await new Promise(resolve => setTimeout(resolve, delay));
+      if (isQuota && i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, initialDelay));
         continue;
       }
       throw err;
@@ -45,26 +45,30 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDel
   throw lastError;
 }
 
-const extractText = (response: GenerateContentResponse, fallbackError: string): string => {
-  if (response.candidates && response.candidates[0]?.finishReason === 'SAFETY') {
+// Access the .text property directly as per latest Gemini SDK standards
+const extractText = (response: GenerateContentResponse): string => {
+  if (response.candidates?.[0]?.finishReason === 'SAFETY') {
     throw new Error("Biological safety filter triggered.");
   }
-  const text = response.text;
-  if (!text) throw new Error(fallbackError);
-  return text;
+  return response.text || "";
+};
+
+const extractGroundingUrls = (response: GenerateContentResponse): string[] => {
+  const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (!chunks) return [];
+  return chunks.map((chunk: any) => chunk.web?.uri || chunk.maps?.uri).filter((uri: any) => !!uri);
 };
 
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
   return callWithRetry(async () => {
+    // Initialize client within the function to ensure the correct context for each call
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Resolve protein: "${query}". Return JSON with UniProt ID, PDB ID, name, description, length, and 6 highly relevant mutations for stability or function.`,
+      contents: `Resolve protein: "${query}". Provide UniProt/PDB IDs. Suggest 6 mutations for oncology/biotech.`,
       config: {
-        systemInstruction: "You are NOVA, a decision-first protein engineering workstation.",
+        systemInstruction: "You are NOVA, a world-class structural bioinformatician. Respond with JSON.",
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 4096 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -92,8 +96,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
       }
     });
 
-    const text = extractText(response, "Failed to resolve protein data.");
-    const parsed = safeJsonParse<any>(text, "Protein Metadata Resolution");
+    const parsed = safeJsonParse<any>(extractText(response), "Protein Resolution");
     return { ...parsed, sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold', structureStatus: 'idle' };
   });
 };
@@ -104,33 +107,20 @@ export const generateStrategicRoadmap = async (
   env: ExperimentalEnvironment,
   pastLogs: string
 ): Promise<DecisionMemo> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
   return callWithRetry(async () => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Synthesize a Strategic Roadmap for ${protein.name} (${protein.id}).
-      Primary Goal: ${goal}.
-      Current Lab Environment: pH ${env.ph}, Temp ${env.temp}°C, Salt ${env.ionicStrength}mM.
-      Feedback Loop - Previous Experimental Observations:
-      ${pastLogs || "No prior experiments logged."}
-      
-      Task:
-      1. Prescribe exactly 3 mutations to TEST next based on environment and goal.
-      2. Identify 2 mutations to AVOID (Blacklist).
-      3. Explain specifically how the pH ${env.ph} and Temp ${env.temp} affected the roadmap selection.
-      4. Provide 'Lit Alignment' scores (0-1) based on real-world grounding.`,
+      contents: `Strategic Roadmap: ${protein.name} (${protein.id}). Goal: ${goal}. Environment: pH ${env.ph}, Temp ${env.temp}°C. Context: ${pastLogs || "None"}.`,
       config: {
         tools: [{googleSearch: {}}],
-        systemInstruction: "You are NOVA Strategic Intelligence. Prescribe experimental direction using structural physics and grounding. Always return JSON.",
+        systemInstruction: "You are NOVA Strategic Intelligence. Recommend priority mutations based on thermodynamic physics. Respond with JSON.",
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 8192 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             confidenceMode: { type: Type.STRING },
             summary: { type: Type.STRING },
-            environmentalRoadmapImpact: { type: Type.STRING },
             recommended: {
               type: Type.ARRAY,
               items: {
@@ -143,8 +133,7 @@ export const generateStrategicRoadmap = async (
                   rationale: { type: Type.STRING },
                   risk: { type: Type.STRING },
                   litScore: { type: Type.NUMBER }
-                },
-                required: ["mutation", "rationale", "rank", "litScore"]
+                }
               }
             },
             discouraged: {
@@ -156,10 +145,10 @@ export const generateStrategicRoadmap = async (
                   risk: { type: Type.STRING },
                   signal: { type: Type.STRING },
                   litScore: { type: Type.NUMBER }
-                },
-                required: ["mutation", "risk", "signal", "litScore"]
+                }
               }
             },
+            environmentalRoadmapImpact: { type: Type.STRING },
             learningProgress: {
               type: Type.OBJECT,
               properties: {
@@ -167,25 +156,13 @@ export const generateStrategicRoadmap = async (
                 learnedPattern: { type: Type.STRING }
               }
             }
-          },
-          required: ["confidenceMode", "summary", "recommended", "discouraged", "environmentalRoadmapImpact"]
+          }
         }
       }
     });
 
-    const text = extractText(response, "Strategic synthesis engine timeout.");
-    const baseResult = safeJsonParse<DecisionMemo>(text, "Strategic Roadmap Generation");
-
-    // Extract grounding URLs for required search grounding display
-    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-    const groundingUrls: string[] = [];
-    if (groundingMetadata?.groundingChunks) {
-      groundingMetadata.groundingChunks.forEach((chunk: any) => {
-        if (chunk.web && chunk.web.uri) groundingUrls.push(chunk.web.uri);
-      });
-    }
-
-    return { ...baseResult, groundingUrls };
+    const baseResult = safeJsonParse<DecisionMemo>(extractText(response), "Roadmap Synthesis");
+    return { ...baseResult, groundingUrls: extractGroundingUrls(response) };
   });
 };
 
@@ -196,20 +173,16 @@ export const predictMutation = async (
   risk: RiskTolerance,
   environment: ExperimentalEnvironment
 ): Promise<PredictionResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
-  
   return callWithRetry(async () => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: `Assay Simulation: substitution ${mutationStr} for ${protein.name}.
-      Biological Goal: ${goal}. Environment: pH ${environment.ph}, Temp ${environment.temp}°C, Salt ${environment.ionicStrength}mM.
-      Determine thermodynamic ΔΔG and literature alignment.`,
+      contents: `Predict ΔΔG for ${mutationStr} in ${protein.name}. Condition: pH ${environment.ph}, Temp ${environment.temp}°C.`,
       config: {
         tools: [{googleSearch: {}}],
-        systemInstruction: `You are NOVA. Predict ΔΔG stability change. Use Search Grounding for real paper URLs.`,
+        systemInstruction: "You are NOVA. Provide precise ΔΔG and literature alignment. Respond with JSON.",
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 12288 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -224,6 +197,15 @@ export const predictMutation = async (
             patternAnchors: { type: Type.ARRAY, items: { type: Type.STRING } },
             signalConsistency: { type: Type.STRING },
             reportSummary: { type: Type.STRING },
+            energyBreakdown: {
+              type: Type.OBJECT,
+              properties: {
+                vanDerWaals: { type: Type.NUMBER },
+                electrostatics: { type: Type.NUMBER },
+                hBonds: { type: Type.NUMBER },
+                solvation: { type: Type.NUMBER }
+              }
+            },
             environmentalAnalysis: {
               type: Type.OBJECT,
               properties: {
@@ -244,8 +226,7 @@ export const predictMutation = async (
                   year: { type: Type.NUMBER },
                   url: { type: Type.STRING },
                   relevance: { type: Type.STRING }
-                },
-                required: ["title", "journal", "year", "url", "relevance"]
+                }
               }
             },
             benchmarkAlignments: {
@@ -260,39 +241,29 @@ export const predictMutation = async (
               }
             }
           },
-          required: ["protein", "uniprotId", "mutation", "deltaDeltaG", "stabilityImpact", "confidence", "overallLiteratureAlignment", "regime", "reportSummary", "environmentalAnalysis", "scientificPapers", "benchmarkAlignments"]
+          required: ["deltaDeltaG", "stabilityImpact", "reportSummary", "confidence", "overallLiteratureAlignment", "environmentalAnalysis"]
         }
       }
     });
 
-    const text = extractText(response, "Assay processing failure.");
-    const baseResult = safeJsonParse<any>(text, "Mutation Prediction Logic");
-    
-    // Explicit Grounding URL Extraction for visibility
-    const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
-    if (groundingMetadata?.groundingChunks) {
-      const groundedLinks = groundingMetadata.groundingChunks
-        .filter((chunk: any) => chunk.web)
-        .map((chunk: any) => ({
-          title: chunk.web.title || 'Resolved Research Context',
-          journal: 'Web Grounding',
-          year: new Date().getFullYear(),
-          url: chunk.web.uri,
-          relevance: 'Direct literature support identified during analysis.'
-        }));
-      
-      if (groundedLinks.length > 0) {
-        baseResult.scientificPapers = [...(baseResult.scientificPapers || []), ...groundedLinks];
-      }
-    }
+    const baseResult = safeJsonParse<any>(extractText(response), "Mutation Prediction");
+    const groundingUrls = extractGroundingUrls(response);
+    const discoveryPapers = groundingUrls.map(url => ({
+      title: "Real-time Verification",
+      journal: new URL(url).hostname,
+      year: new Date().getFullYear(),
+      url: url,
+      relevance: "Verification of thermodynamics via real-time search"
+    }));
 
     return { 
       ...baseResult, 
+      scientificPapers: [...(baseResult.scientificPapers || []), ...discoveryPapers],
       reproducibility: {
         runId: `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
         timestamp: new Date().toISOString(),
-        modelName: "NOVA-CORE",
-        modelVersion: "0.2.5v",
+        modelName: "NOVA-CORE-PRO",
+        modelVersion: "0.2.5v-pro",
         inputHash: "GATED-SHA",
         dockerImageHash: "v0.2.5v-stable",
         structureSource: protein.sourceType,

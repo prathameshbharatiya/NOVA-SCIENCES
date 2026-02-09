@@ -11,7 +11,7 @@ import {
   DecisionMemo
 } from "../types";
 
-// Using Gemini 3 Pro for complex structural bioinformatics and thermodynamic reasoning
+// Upgrade to Gemini 3 Pro for complex structural bioinformatics and advanced STEM reasoning
 const MODEL_NAME = "gemini-3-pro-preview"; 
 
 function safeJsonParse<T>(text: string, fallbackDesc: string): T {

@@ -15,9 +15,9 @@ interface State {
 /**
  * ErrorBoundary component to catch and handle runtime errors in the component tree.
  */
-// Fix: Extending Component directly from the named import improves type resolution for 'props'
+// Fix: Extending Component directly and using an explicit constructor ensures 'this.props' and 'this.state' are correctly typed and available.
 class ErrorBoundary extends Component<Props, State> {
-  // Explicitly initialize state to ensure visibility and type safety
+  // Fix: Explicitly initializing state in the constructor and calling super(props) resolves issues where 'props' is not recognized on the class instance.
   constructor(props: Props) {
     super(props);
     this.state = {
@@ -37,7 +37,7 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   public render(): ReactNode {
-    // Access state and props via 'this' to handle runtime errors gracefully
+    // Access state through 'this.state' which is correctly inherited.
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center p-10 bg-slate-50 text-center">
@@ -75,7 +75,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Explicitly return children from props; inheritance from Component provides the 'props' property
+    // Fix: Using this.props.children is now valid as the inheritance and constructor binding are properly established.
     return this.props.children;
   }
 }

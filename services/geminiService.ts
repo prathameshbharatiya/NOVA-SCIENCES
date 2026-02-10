@@ -11,8 +11,8 @@ import {
   DecisionMemo
 } from "../types";
 
-// Upgrade to Gemini 3 Pro for complex structural bioinformatics and advanced STEM reasoning
-const MODEL_NAME = "gemini-3-pro-preview"; 
+// Using Gemini 3 Flash to resolve quota limits and maximize analysis speed
+const MODEL_NAME = "gemini-3-flash-preview"; 
 
 function safeJsonParse<T>(text: string, fallbackDesc: string): T {
   try {
@@ -24,7 +24,10 @@ function safeJsonParse<T>(text: string, fallbackDesc: string): T {
   }
 }
 
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 1, initialDelay = 1000): Promise<T> {
+/**
+ * Enhanced call wrapper with exponential backoff to handle quota (429) errors gracefully.
+ */
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2000): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -33,10 +36,13 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 1, initialDel
       lastError = err;
       const status = err.status || 0;
       const msg = err.message?.toLowerCase() || "";
-      const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted");
+      const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || msg.includes("limit");
       
       if (isQuota && i < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, initialDelay));
+        // Exponential backoff: 2s, 4s, 8s...
+        const delay = initialDelay * Math.pow(2, i);
+        console.warn(`Quota reached. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
       throw err;
@@ -270,8 +276,8 @@ export const predictMutation = async (
       reproducibility: {
         runId: `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
         timestamp: new Date().toISOString(),
-        modelName: "NOVA-CORE-PRO",
-        modelVersion: "0.2.5v-pro",
+        modelName: "NOVA-CORE-FLASH",
+        modelVersion: "0.2.5v-flash",
         inputHash: "GATED-SHA",
         dockerImageHash: "v0.2.5v-stable",
         structureSource: protein.sourceType,

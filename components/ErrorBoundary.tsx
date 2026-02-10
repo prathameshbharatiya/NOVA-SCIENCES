@@ -1,7 +1,7 @@
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 
-// Define Props interface with optional children to match React.Component's expected structure
+// Define Props interface with optional children
 interface Props {
   children?: ReactNode;
 }
@@ -14,17 +14,15 @@ interface State {
 
 /**
  * ErrorBoundary component to catch and handle runtime errors in the component tree.
+ * Explicitly extending React.Component<Props, State> ensures that 'this.state' and 'this.props' 
+ * are correctly typed and available in the class instance.
  */
-// Fix: Extending Component directly and using an explicit constructor ensures 'this.props' and 'this.state' are correctly typed and available.
-class ErrorBoundary extends Component<Props, State> {
-  // Fix: Explicitly initializing state in the constructor and calling super(props) resolves issues where 'props' is not recognized on the class instance.
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null
-    };
-  }
+class ErrorBoundary extends React.Component<Props, State> {
+  // Use property initializer for state to ensure it's correctly typed and initialized
+  public override state: State = {
+    hasError: false,
+    error: null
+  };
 
   // Lifecycle method to update state when an error occurs in child components
   public static getDerivedStateFromError(error: Error): State {
@@ -32,12 +30,12 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   // Lifecycle method for logging error details
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("CRITICAL UI ERROR:", error, errorInfo);
   }
 
-  public render(): ReactNode {
-    // Access state through 'this.state' which is correctly inherited.
+  public override render(): ReactNode {
+    // Access state through 'this.state' which is now correctly inherited from React.Component
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center p-10 bg-slate-50 text-center">
@@ -75,7 +73,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: Using this.props.children is now valid as the inheritance and constructor binding are properly established.
+    // Correctly accessing 'this.props.children' now that inheritance is properly recognized
     return this.props.children;
   }
 }

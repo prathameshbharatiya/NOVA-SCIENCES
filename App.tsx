@@ -95,10 +95,9 @@ const App: React.FC = () => {
         .slice(0, 5)
         .map(le => `Mutation: ${le.mutationTested}, Outcome: ${le.outcome}`).join('\n');
 
-      const [pred, memo] = await Promise.all([
-        predictMutation(currentProtein, mutation, goal, riskTolerance, env),
-        generateStrategicRoadmap(currentProtein, goal, env, pastLogsStr)
-      ]);
+      // Sequential execution to avoid hitting rate limits (429)
+      const pred = await predictMutation(currentProtein, mutation, goal, riskTolerance, env);
+      const memo = await generateStrategicRoadmap(currentProtein, goal, env, pastLogsStr);
 
       setPredictionResult(pred);
       setStrategyMemo(memo);
@@ -116,9 +115,9 @@ const App: React.FC = () => {
       }, ...prev]);
 
     } catch (err: any) {
-      const isQuota = err.message?.toLowerCase().includes("quota") || err.status === 429;
+      const isQuota = err.message?.toLowerCase().includes("quota") || err.status === 429 || err.message?.includes("429");
       setError({ 
-        message: isQuota ? "System resources limited. Please retry in 30 seconds." : (err.message || "Analysis synthesis failed."),
+        message: isQuota ? "High system load detected. We are retrying automatically, but if this persists, please wait 60 seconds." : (err.message || "Analysis synthesis failed."),
         type: isQuota ? 'quota' : 'general' 
       }); 
     } finally { 

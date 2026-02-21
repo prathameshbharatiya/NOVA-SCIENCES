@@ -25,9 +25,9 @@ function safeJsonParse<T>(text: string, fallbackDesc: string): T {
 }
 
 /**
- * Enhanced call wrapper with exponential backoff to handle quota (429) errors gracefully.
+ * Enhanced call wrapper with exponential backoff and jitter to handle quota (429) errors gracefully.
  */
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2000): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 3000): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -36,12 +36,13 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDel
       lastError = err;
       const status = err.status || 0;
       const msg = err.message?.toLowerCase() || "";
-      const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || msg.includes("limit");
+      const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || msg.includes("limit") || msg.includes("429");
       
       if (isQuota && i < maxRetries - 1) {
-        // Exponential backoff: 2s, 4s, 8s...
-        const delay = initialDelay * Math.pow(2, i);
-        console.warn(`Quota reached. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+        // Exponential backoff with jitter: (2^i * delay) + random
+        const jitter = Math.random() * 1000;
+        const delay = (initialDelay * Math.pow(2, i)) + jitter;
+        console.warn(`Quota reached. Retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }

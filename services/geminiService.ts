@@ -27,7 +27,7 @@ function safeJsonParse<T>(text: string, fallbackDesc: string): T {
 /**
  * Enhanced call wrapper with exponential backoff and jitter to handle quota (429) errors gracefully.
  */
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 3000): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 6, initialDelay = 4000): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -39,9 +39,9 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDel
       const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || msg.includes("limit") || msg.includes("429");
       
       if (isQuota && i < maxRetries - 1) {
-        // Exponential backoff with jitter: (2^i * delay) + random
-        const jitter = Math.random() * 1000;
-        const delay = (initialDelay * Math.pow(2, i)) + jitter;
+        // More aggressive exponential backoff with jitter: (3^i * delay) + random
+        const jitter = Math.random() * 2000;
+        const delay = (initialDelay * Math.pow(2.5, i)) + jitter;
         console.warn(`Quota reached. Retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
@@ -66,8 +66,14 @@ const extractGroundingUrls = (response: GenerateContentResponse): string[] => {
   return chunks.map((chunk: any) => chunk.web?.uri || chunk.maps?.uri).filter((uri: any) => !!uri);
 };
 
+// Simple in-memory cache to avoid redundant calls in the same session
+const cache = new Map<string, any>();
+
 export const searchProtein = async (query: string): Promise<ProteinMetadata> => {
-  return callWithRetry(async () => {
+  const cacheKey = `protein_${query.toLowerCase()}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  const result = await callWithRetry(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -105,6 +111,9 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
     const parsed = safeJsonParse<any>(extractText(response), "Protein Resolution");
     return { ...parsed, sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold', structureStatus: 'idle' };
   });
+
+  cache.set(cacheKey, result);
+  return result;
 };
 
 export const generateStrategicRoadmap = async (
@@ -113,7 +122,10 @@ export const generateStrategicRoadmap = async (
   env: ExperimentalEnvironment,
   pastLogs: string
 ): Promise<DecisionMemo> => {
-  return callWithRetry(async () => {
+  const cacheKey = `roadmap_${protein.id}_${goal}_${env.ph}_${env.temp}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  const result = await callWithRetry(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -176,6 +188,9 @@ export const generateStrategicRoadmap = async (
     const baseResult = safeJsonParse<DecisionMemo>(extractText(response), "Roadmap Synthesis");
     return { ...baseResult, groundingUrls: extractGroundingUrls(response) };
   });
+
+  cache.set(cacheKey, result);
+  return result;
 };
 
 export const predictMutation = async (
@@ -186,7 +201,10 @@ export const predictMutation = async (
   environment: ExperimentalEnvironment
 ): Promise<PredictionResult> => {
   const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
-  return callWithRetry(async () => {
+  const cacheKey = `prediction_${protein.id}_${mutationStr}_${goal}_${environment.ph}_${environment.temp}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  const result = await callWithRetry(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -195,7 +213,8 @@ export const predictMutation = async (
       Environment: pH ${environment.ph}, Temp ${environment.temp}°C.
       Explain the thermodynamic impact and cite relevant structural biology patterns.`,
       config: {
-        tools: [{googleSearch: {}}],
+        // Removed googleSearch from individual predictions to drastically reduce quota usage.
+        // Discovery is now handled at the Roadmap level.
         systemInstruction: "You are NOVA. Provide precise ΔΔG and literature alignment. Respond with JSON.",
         responseMimeType: "application/json",
         responseSchema: {
@@ -287,4 +306,7 @@ export const predictMutation = async (
       }
     };
   });
+
+  cache.set(cacheKey, result);
+  return result;
 };

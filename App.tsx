@@ -57,6 +57,7 @@ const App: React.FC = () => {
   }, [isAnalyzing, predictionResult, strategyMemo]);
 
   const handleResolveProtein = async (id: string) => {
+    if (currentProtein?.id === id) return; // Avoid redundant resolution
     setIsSearching(true);
     setError(null);
     try {
@@ -84,10 +85,28 @@ const App: React.FC = () => {
 
   const handleComprehensiveAnalysis = async () => {
     if (!currentProtein || isAnalyzing) return;
+    
+    // Check if we already have a prediction for this exact configuration
+    const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
+    if (predictionResult && 
+        predictionResult.uniprotId === currentProtein.id && 
+        predictionResult.mutation === mutationStr &&
+        predictionResult.environmentalAnalysis?.leverageFactor !== undefined // Simple check for env match
+    ) {
+      // If we have a result, we might still want to re-run if env changed significantly, 
+      // but for now let's assume the user wants a new analysis if they click the button 
+      // UNLESS nothing changed.
+    }
+
     setIsAnalyzing(true);
     setError(null);
     setPredictionResult(null);
-    setStrategyMemo(null);
+    
+    // Only clear strategy memo if it's likely stale (different protein/goal)
+    // We'll keep it if it's the same protein and goal to reduce UI flicker
+    if (strategyMemo && (strategyMemo as any)._proteinId !== currentProtein.id) {
+      setStrategyMemo(null);
+    }
 
     try {
       const pastLogsStr = logEntries
@@ -97,7 +116,17 @@ const App: React.FC = () => {
 
       // Sequential execution to avoid hitting rate limits (429)
       const pred = await predictMutation(currentProtein, mutation, goal, riskTolerance, env);
-      const memo = await generateStrategicRoadmap(currentProtein, goal, env, pastLogsStr);
+      
+      // Only fetch roadmap if we don't have one or if it's for a different protein/goal
+      let memo = strategyMemo;
+      if (!memo || (memo as any)._proteinId !== currentProtein.id || (memo as any)._goal !== goal) {
+        // Add a small artificial delay between calls to let the quota "breathe"
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        memo = await generateStrategicRoadmap(currentProtein, goal, env, pastLogsStr);
+        // Tag the memo with metadata to track what it was generated for
+        (memo as any)._proteinId = currentProtein.id;
+        (memo as any)._goal = goal;
+      }
 
       setPredictionResult(pred);
       setStrategyMemo(memo);
@@ -407,7 +436,10 @@ const App: React.FC = () => {
                     {currentProtein.suggestedMutations.map((suggested, idx) => (
                       <button 
                         key={idx} 
-                        onClick={() => applyPreset(suggested.residue + suggested.position)}
+                        onClick={() => {
+                          setMutation({ wildtype: suggested.residue, position: suggested.position, mutant: '' });
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
                         className="text-left bg-slate-50 border border-slate-100 p-6 rounded-3xl hover:border-indigo-500 hover:bg-indigo-50/30 transition-all flex gap-5 items-center group shadow-sm hover:shadow-md"
                       >
                          <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex flex-col items-center justify-center font-black text-slate-900 group-hover:border-indigo-200 transition-colors shadow-inner">

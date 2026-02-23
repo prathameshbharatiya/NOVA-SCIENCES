@@ -11,8 +11,10 @@ import {
   DecisionMemo
 } from "../types";
 
-// Using Gemini 3 Flash to resolve quota limits and maximize analysis speed
-const MODEL_NAME = "gemini-3-flash-preview"; 
+// Using Gemini 3.1 Pro for complex analysis to improve stability and reasoning depth
+const MODEL_NAME = "gemini-3.1-pro-preview"; 
+// Using Gemini 3 Flash for faster, simpler tasks like protein resolution
+const FAST_MODEL_NAME = "gemini-3-flash-preview"; 
 
 function safeJsonParse<T>(text: string, fallbackDesc: string): T {
   try {
@@ -28,7 +30,7 @@ function safeJsonParse<T>(text: string, fallbackDesc: string): T {
  * Enhanced call wrapper with exponential backoff and jitter to handle quota (429) errors gracefully.
  * Optimized for speed: reduced initial delay and more reasonable backoff.
  */
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 800): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 1000): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -37,13 +39,24 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDel
       lastError = err;
       const status = err.status || 0;
       const msg = err.message?.toLowerCase() || "";
-      const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || msg.includes("limit") || msg.includes("429");
       
-      if (isQuota && i < maxRetries - 1) {
-        // Very fast exponential backoff with jitter: (1.5^i * delay) + random
-        const jitter = Math.random() * 300;
-        const delay = (initialDelay * Math.pow(1.5, i)) + jitter;
-        console.warn(`Quota reached. Retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
+      // Handle Quota (429), Service Unavailable (503), and Internal Server Error (500)
+      const isRetryable = 
+        status === 429 || status === 503 || status === 500 ||
+        msg.includes("quota") || 
+        msg.includes("resource_exhausted") || 
+        msg.includes("limit") || 
+        msg.includes("429") ||
+        msg.includes("503") ||
+        msg.includes("unavailable") ||
+        msg.includes("high demand") ||
+        msg.includes("500");
+      
+      if (isRetryable && i < maxRetries - 1) {
+        // Exponential backoff with jitter: (2^i * delay) + random
+        const jitter = Math.random() * 500;
+        const delay = (initialDelay * Math.pow(2, i)) + jitter;
+        console.warn(`Transient error (${status || 'unknown'}). Retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -77,7 +90,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
   const result = await callWithRetry(async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: FAST_MODEL_NAME,
       contents: `Resolve protein: "${query}". Provide UniProt/PDB IDs. Suggest 6 mutations for oncology/biotech research.`,
       config: {
         systemInstruction: "You are NOVA, a world-class structural bioinformatician. Respond with JSON.",

@@ -147,10 +147,17 @@ const App: React.FC = () => {
       }, ...prev]);
 
     } catch (err: any) {
-      const isQuota = err.message?.toLowerCase().includes("quota") || err.status === 429 || err.message?.includes("429");
+      const msg = err.message?.toLowerCase() || "";
+      const isQuota = err.status === 429 || msg.includes("quota") || msg.includes("429");
+      const isUnavailable = err.status === 503 || msg.includes("unavailable") || msg.includes("high demand") || msg.includes("503");
+      
       setError({ 
-        message: isQuota ? "High system load detected. We are retrying automatically, but if this persists, please wait 60 seconds." : (err.message || "Analysis synthesis failed."),
-        type: isQuota ? 'quota' : 'general' 
+        message: isQuota 
+          ? "High system load detected. We are retrying automatically, but if this persists, please wait 60 seconds." 
+          : isUnavailable 
+            ? "The analysis engine is currently experiencing high demand. We are retrying, but you may need to wait a minute."
+            : (err.message || "Analysis synthesis failed."),
+        type: (isQuota || isUnavailable) ? 'quota' : 'general' 
       }); 
     } finally { 
       setIsAnalyzing(false); 

@@ -114,19 +114,22 @@ const App: React.FC = () => {
         .slice(0, 5)
         .map(le => `Mutation: ${le.mutationTested}, Outcome: ${le.outcome}`).join('\n');
 
-      // Sequential execution to avoid hitting rate limits (429)
-      const pred = await predictMutation(currentProtein, mutation, goal, riskTolerance, env);
+      // Parallel execution for maximum speed. 
+      // The retry logic in geminiService handles quota issues gracefully.
+      const predPromise = predictMutation(currentProtein, mutation, goal, riskTolerance, env);
       
-      // Only fetch roadmap if we don't have one or if it's for a different protein/goal
-      let memo = strategyMemo;
-      if (!memo || (memo as any)._proteinId !== currentProtein.id || (memo as any)._goal !== goal) {
-        // Add a small artificial delay between calls to let the quota "breathe"
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        memo = await generateStrategicRoadmap(currentProtein, goal, env, pastLogsStr);
-        // Tag the memo with metadata to track what it was generated for
-        (memo as any)._proteinId = currentProtein.id;
-        (memo as any)._goal = goal;
+      let memoPromise: Promise<DecisionMemoType>;
+      if (!strategyMemo || (strategyMemo as any)._proteinId !== currentProtein.id || (strategyMemo as any)._goal !== goal) {
+        memoPromise = generateStrategicRoadmap(currentProtein, goal, env, pastLogsStr).then(memo => {
+          (memo as any)._proteinId = currentProtein.id;
+          (memo as any)._goal = goal;
+          return memo;
+        });
+      } else {
+        memoPromise = Promise.resolve(strategyMemo);
       }
+
+      const [pred, memo] = await Promise.all([predPromise, memoPromise]);
 
       setPredictionResult(pred);
       setStrategyMemo(memo);

@@ -26,8 +26,9 @@ function safeJsonParse<T>(text: string, fallbackDesc: string): T {
 
 /**
  * Enhanced call wrapper with exponential backoff and jitter to handle quota (429) errors gracefully.
+ * Optimized for speed: reduced initial delay and more reasonable backoff.
  */
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 6, initialDelay = 4000): Promise<T> {
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 800): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -39,9 +40,9 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 6, initialDel
       const isQuota = status === 429 || msg.includes("quota") || msg.includes("resource_exhausted") || msg.includes("limit") || msg.includes("429");
       
       if (isQuota && i < maxRetries - 1) {
-        // More aggressive exponential backoff with jitter: (3^i * delay) + random
-        const jitter = Math.random() * 2000;
-        const delay = (initialDelay * Math.pow(2.5, i)) + jitter;
+        // Very fast exponential backoff with jitter: (1.5^i * delay) + random
+        const jitter = Math.random() * 300;
+        const delay = (initialDelay * Math.pow(1.5, i)) + jitter;
         console.warn(`Quota reached. Retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
@@ -137,7 +138,7 @@ export const generateStrategicRoadmap = async (
       CRITICAL INSTRUCTION: Identify exactly 3 high-priority mutations to TRY and 3 high-risk mutations to AVOID. 
       For EACH mutation, provide a detailed structural rationale (e.g., 'disrupts hydrophobic core packing', 'introduces steric clash with DNA interface').`,
       config: {
-        tools: [{googleSearch: {}}],
+        // Removed googleSearch to significantly speed up synthesis and improve reliability.
         systemInstruction: "You are NOVA Strategic Intelligence. Recommend specific mutations to TRY vs AVOID based on thermodynamic physics and structural biology. Respond with JSON.",
         responseMimeType: "application/json",
         responseSchema: {

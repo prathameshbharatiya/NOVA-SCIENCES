@@ -42,6 +42,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<{ message: string; type: 'quota' | 'general' } | null>(null);
 
   const resultsRef = useRef<HTMLDivElement>(null);
+  const activeRequestId = useRef<string | null>(null);
 
   useEffect(() => { localStorage.setItem(LOGS_KEY, JSON.stringify(logEntries)); }, [logEntries]);
 
@@ -86,24 +87,14 @@ const App: React.FC = () => {
   const handleComprehensiveAnalysis = async () => {
     if (!currentProtein || isAnalyzing) return;
     
-    // Check if we already have a prediction for this exact configuration
-    const mutationStr = `${mutation.wildtype}${mutation.position}${mutation.mutant}`;
-    if (predictionResult && 
-        predictionResult.uniprotId === currentProtein.id && 
-        predictionResult.mutation === mutationStr &&
-        predictionResult.environmentalAnalysis?.leverageFactor !== undefined // Simple check for env match
-    ) {
-      // If we have a result, we might still want to re-run if env changed significantly, 
-      // but for now let's assume the user wants a new analysis if they click the button 
-      // UNLESS nothing changed.
-    }
+    const requestId = Math.random().toString(36).substring(2, 9);
+    activeRequestId.current = requestId;
 
     setIsAnalyzing(true);
     setError(null);
     setPredictionResult(null);
     
     // Only clear strategy memo if it's likely stale (different protein/goal)
-    // We'll keep it if it's the same protein and goal to reduce UI flicker
     if (strategyMemo && (strategyMemo as any)._proteinId !== currentProtein.id) {
       setStrategyMemo(null);
     }
@@ -115,14 +106,15 @@ const App: React.FC = () => {
         .map(le => `Mutation: ${le.mutationTested}, Outcome: ${le.outcome}`).join('\n');
 
       // Parallel execution for maximum speed. 
-      // The retry logic in geminiService handles quota issues gracefully.
       const predPromise = predictMutation(currentProtein, mutation, goal, riskTolerance, env);
       
       let memoPromise: Promise<DecisionMemoType>;
       if (!strategyMemo || (strategyMemo as any)._proteinId !== currentProtein.id || (strategyMemo as any)._goal !== goal) {
         memoPromise = generateStrategicRoadmap(currentProtein, goal, env, pastLogsStr).then(memo => {
-          (memo as any)._proteinId = currentProtein.id;
-          (memo as any)._goal = goal;
+          if (memo && (memo as any).success !== false) {
+            (memo as any)._proteinId = currentProtein.id;
+            (memo as any)._goal = goal;
+          }
           return memo;
         });
       } else {
@@ -130,6 +122,19 @@ const App: React.FC = () => {
       }
 
       const [pred, memo] = await Promise.all([predPromise, memoPromise]);
+
+      // If a newer request has started, ignore this one
+      if (activeRequestId.current !== requestId) return;
+
+      // Handle structured error from reliability layer
+      if ((pred as any).success === false || (memo as any).success === false) {
+        const errData = (pred as any).success === false ? (pred as any) : (memo as any);
+        setError({ 
+          message: errData.safeMessage || "High demand detected. Please retry.",
+          type: 'quota'
+        });
+        return;
+      }
 
       setPredictionResult(pred);
       setStrategyMemo(memo);
@@ -147,6 +152,8 @@ const App: React.FC = () => {
       }, ...prev]);
 
     } catch (err: any) {
+      if (activeRequestId.current !== requestId) return;
+
       const msg = err.message?.toLowerCase() || "";
       const isQuota = err.status === 429 || msg.includes("quota") || msg.includes("429");
       const isUnavailable = err.status === 503 || msg.includes("unavailable") || msg.includes("high demand") || msg.includes("503");
@@ -160,7 +167,9 @@ const App: React.FC = () => {
         type: (isQuota || isUnavailable) ? 'quota' : 'general' 
       }); 
     } finally { 
-      setIsAnalyzing(false); 
+      if (activeRequestId.current === requestId) {
+        setIsAnalyzing(false); 
+      }
     }
   };
 

@@ -11,10 +11,10 @@ import {
   DecisionMemo
 } from "../types";
 
-// Using Gemini 3.1 Pro for complex analysis to improve stability and reasoning depth
-const MODEL_NAME = "gemini-3.1-pro-preview"; 
-// Using Gemini 3 Flash for faster, simpler tasks like protein resolution
-const FAST_MODEL_NAME = "gemini-3-flash-preview"; 
+// Primary model as requested by user
+const MODEL_NAME = "gemini-3-flash-preview"; 
+// Fallback models in order of preference (using allowed models that correspond to user's intent)
+const FALLBACK_MODELS = ["gemini-3.1-pro-preview", "gemini-flash-lite-latest"];
 
 function safeJsonParse<T>(text: string, fallbackDesc: string): T {
   try {
@@ -27,43 +27,55 @@ function safeJsonParse<T>(text: string, fallbackDesc: string): T {
 }
 
 /**
- * Enhanced call wrapper with exponential backoff and jitter to handle quota (429) errors gracefully.
- * Optimized for speed: reduced initial delay and more reasonable backoff.
+ * Critical Reliability Layer: Implements automatic retry with exponential backoff,
+ * model fallback, and structured error handling as per production requirements.
  */
-async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 1000): Promise<T> {
+async function callWithRetry<T>(
+  fn: (model: string) => Promise<T>, 
+  models: string[] = [MODEL_NAME, ...FALLBACK_MODELS],
+  maxRetries = 3
+): Promise<T> {
   let lastError: any;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await fn();
-    } catch (err: any) {
-      lastError = err;
-      const status = err.status || 0;
-      const msg = err.message?.toLowerCase() || "";
-      
-      // Handle Quota (429), Service Unavailable (503), and Internal Server Error (500)
-      const isRetryable = 
-        status === 429 || status === 503 || status === 500 ||
-        msg.includes("quota") || 
-        msg.includes("resource_exhausted") || 
-        msg.includes("limit") || 
-        msg.includes("429") ||
-        msg.includes("503") ||
-        msg.includes("unavailable") ||
-        msg.includes("high demand") ||
-        msg.includes("500");
-      
-      if (isRetryable && i < maxRetries - 1) {
-        // Exponential backoff with jitter: (2^i * delay) + random
-        const jitter = Math.random() * 500;
-        const delay = (initialDelay * Math.pow(2, i)) + jitter;
-        console.warn(`Transient error (${status || 'unknown'}). Retrying in ${Math.round(delay)}ms... (Attempt ${i + 1}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        continue;
+  const delays = [500, 1500, 3000];
+
+  for (const model of models) {
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        return await fn(model);
+      } catch (err: any) {
+        lastError = err;
+        const status = err.status || 0;
+        const msg = err.message?.toLowerCase() || "";
+        
+        // Retry on 503, UNAVAILABLE, DEADLINE_EXCEEDED, 429
+        const isRetryable = 
+          status === 429 || status === 503 || status === 500 ||
+          msg.includes("quota") || 
+          msg.includes("unavailable") ||
+          msg.includes("high demand") ||
+          msg.includes("deadline_exceeded") ||
+          msg.includes("resource_exhausted") ||
+          msg.includes("limit");
+
+        if (isRetryable && i < maxRetries) {
+          const delay = delays[i] || 3000;
+          console.warn(`[Reliability] Transient error on ${model}. Retrying in ${delay}ms... (Attempt ${i + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        // If not retryable or max retries reached for this model, break inner loop to try next model
+        break;
       }
-      throw err;
     }
   }
-  throw lastError;
+  
+  // If all retries and fallbacks fail, return structured error response
+  return {
+    success: false,
+    error: "Model temporarily unavailable",
+    fallbackReason: lastError?.status === 503 ? "503 overload" : (lastError?.message || "Transport failure"),
+    safeMessage: "High demand detected. Please retry."
+  } as any;
 }
 
 // Access the .text property directly as per latest Gemini SDK standards
@@ -87,10 +99,10 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
   const cacheKey = `protein_${query.toLowerCase()}`;
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-  const result = await callWithRetry(async () => {
+  const result = await callWithRetry<ProteinMetadata>(async (model) => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: FAST_MODEL_NAME,
+      model: model,
       contents: `Resolve protein: "${query}". Provide UniProt/PDB IDs. Suggest 6 mutations for oncology/biotech research.`,
       config: {
         systemInstruction: "You are NOVA, a world-class structural bioinformatician. Respond with JSON.",
@@ -122,11 +134,15 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
       }
     });
 
+    if ((response as any).success === false) return response as any;
+
     const parsed = safeJsonParse<any>(extractText(response), "Protein Resolution");
     return { ...parsed, sourceType: parsed.pdbId ? 'User-Uploaded' : 'AlphaFold', structureStatus: 'idle' };
   });
 
-  cache.set(cacheKey, result);
+  if (result && (result as any).success !== false) {
+    cache.set(cacheKey, result);
+  }
   return result;
 };
 
@@ -139,10 +155,10 @@ export const generateStrategicRoadmap = async (
   const cacheKey = `roadmap_${protein.id}_${goal}_${env.ph}_${env.temp}`;
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-  const result = await callWithRetry(async () => {
+  const result = await callWithRetry<DecisionMemo>(async (model) => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: model,
       contents: `Strategic Roadmap for ${protein.name} (${protein.id}). 
       Goal: ${goal}. 
       Environment: pH ${env.ph}, Temp ${env.temp}°C. 
@@ -199,11 +215,15 @@ export const generateStrategicRoadmap = async (
       }
     });
 
+    if ((response as any).success === false) return response as any;
+
     const baseResult = safeJsonParse<DecisionMemo>(extractText(response), "Roadmap Synthesis");
     return { ...baseResult, groundingUrls: extractGroundingUrls(response) };
   });
 
-  cache.set(cacheKey, result);
+  if (result && (result as any).success !== false) {
+    cache.set(cacheKey, result);
+  }
   return result;
 };
 
@@ -218,10 +238,10 @@ export const predictMutation = async (
   const cacheKey = `prediction_${protein.id}_${mutationStr}_${goal}_${environment.ph}_${environment.temp}`;
   if (cache.has(cacheKey)) return cache.get(cacheKey);
 
-  const result = await callWithRetry(async () => {
+  const result = await callWithRetry<PredictionResult>(async (model) => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: MODEL_NAME,
+      model: model,
       contents: `Predict ΔΔG for mutation ${mutationStr} in ${protein.name} (${protein.id}). 
       Goal: ${goal}. 
       Environment: pH ${environment.ph}, Temp ${environment.temp}°C.
@@ -294,6 +314,8 @@ export const predictMutation = async (
       }
     });
 
+    if ((response as any).success === false) return response as any;
+
     const baseResult = safeJsonParse<any>(extractText(response), "Mutation Prediction");
     const groundingUrls = extractGroundingUrls(response);
     const discoveryPapers = groundingUrls.map(url => ({
@@ -321,6 +343,8 @@ export const predictMutation = async (
     };
   });
 
-  cache.set(cacheKey, result);
+  if (result && (result as any).success !== false) {
+    cache.set(cacheKey, result);
+  }
   return result;
 };

@@ -15,10 +15,12 @@ import MutationCard from './components/MutationCard';
 import ProteinViewer from './components/ProteinViewer';
 import DecisionLog from './components/DecisionLog';
 import DecisionMemo from './components/DecisionMemo';
+import Home from './components/Home';
 
 const LOGS_KEY = 'novasciences_logs_v025_scientist_mode';
 
 const App: React.FC = () => {
+  const [view, setView] = useState<'home' | 'app'>('home');
   const [logEntries, setLogEntries] = useState<DecisionLogEntry[]>(() => {
     try {
       const saved = localStorage.getItem(LOGS_KEY);
@@ -185,14 +187,19 @@ const App: React.FC = () => {
     });
   };
 
+  if (view === 'home') {
+    return <Home onStart={() => setView('app')} />;
+  }
+
   return (
     <div className="min-h-screen pb-20 bg-[#fcfdfe]">
       <nav className="bg-[#0f172a] text-white sticky top-0 z-[60] px-6 py-4 flex items-center justify-between shadow-xl print:hidden">
         <div className="flex items-center gap-4">
           <div className="bg-indigo-600 p-2 rounded-xl shadow-lg"><i className="fa-solid fa-dna text-white"></i></div>
-          <h1 className="text-xl font-black lowercase tracking-tight">novasciences <span className="text-indigo-400">0.2.5v</span></h1>
+          <h1 className="text-xl font-black lowercase tracking-tight">nova sciences <span className="text-indigo-400">0.2.5v</span></h1>
         </div>
         <div className="flex gap-4">
+           <button onClick={() => setView('home')} className="text-indigo-400 text-[10px] font-black uppercase px-4 hover:bg-indigo-500/10 rounded-xl py-2">Home</button>
            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-rose-400 text-[10px] font-black uppercase px-4 hover:bg-rose-500/10 rounded-xl py-2">Wipe Session</button>
         </div>
       </nav>

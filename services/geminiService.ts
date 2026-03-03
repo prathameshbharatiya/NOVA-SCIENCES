@@ -105,7 +105,7 @@ export const searchProtein = async (query: string): Promise<ProteinMetadata> => 
       model: model,
       contents: `Resolve protein: "${query}". Provide UniProt/PDB IDs. Suggest 6 mutations for oncology/biotech research.`,
       config: {
-        systemInstruction: "You are NOVA, a world-class structural bioinformatician. Respond with JSON.",
+        systemInstruction: "You are nova sciences, a world-class structural bioinformatician. Respond with JSON.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -168,7 +168,7 @@ export const generateStrategicRoadmap = async (
       For EACH mutation, provide a detailed structural rationale (e.g., 'disrupts hydrophobic core packing', 'introduces steric clash with DNA interface').`,
       config: {
         // Removed googleSearch to significantly speed up synthesis and improve reliability.
-        systemInstruction: "You are NOVA Strategic Intelligence. Recommend specific mutations to TRY vs AVOID based on thermodynamic physics and structural biology. Respond with JSON.",
+        systemInstruction: "You are nova sciences Strategic Intelligence. Recommend specific mutations to TRY vs AVOID based on thermodynamic physics and structural biology. Respond with JSON.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -249,7 +249,7 @@ export const predictMutation = async (
       config: {
         // Removed googleSearch from individual predictions to drastically reduce quota usage.
         // Discovery is now handled at the Roadmap level.
-        systemInstruction: "You are NOVA. Provide precise ΔΔG and literature alignment. Respond with JSON.",
+        systemInstruction: "You are nova sciences. Provide precise ΔΔG and literature alignment. Respond with JSON.",
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -332,7 +332,7 @@ export const predictMutation = async (
       reproducibility: {
         runId: `NS-${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
         timestamp: new Date().toISOString(),
-        modelName: "NOVA-CORE-FLASH",
+        modelName: "nova sciences-CORE-FLASH",
         modelVersion: "0.2.5v-flash",
         inputHash: "GATED-SHA",
         dockerImageHash: "v0.2.5v-stable",

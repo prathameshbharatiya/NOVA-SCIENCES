@@ -1,4 +1,7 @@
 import React from 'react';
+import HomeProteinViewer from './HomeProteinViewer';
+import { motion } from 'framer-motion';
+import { MousePointer2, Info } from 'lucide-react';
 
 interface HomeProps {
   onStart: () => void;
@@ -277,20 +280,43 @@ const Home: React.FC<HomeProps> = ({ onStart }) => {
           </div>
         </div>
 
-        <div className="relative hidden lg:block">
-          <div className="bg-white p-4 rounded-[3rem] shadow-2xl border-2 border-slate-50 relative z-10 overflow-hidden">
-            <img 
-              src="https://picsum.photos/seed/protein-structure/800/1000" 
-              alt="Protein Structure" 
-              className="rounded-[2.5rem] grayscale hover:grayscale-0 transition-all duration-700"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute inset-0 bg-indigo-600/10 mix-blend-multiply pointer-events-none"></div>
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          className="relative hidden lg:block"
+        >
+          <div className="bg-white p-4 rounded-[3rem] shadow-2xl border-2 border-slate-50 relative z-10 overflow-hidden group">
+            <div className="relative h-[600px] w-full bg-slate-50 rounded-[2.5rem] overflow-hidden">
+              <HomeProteinViewer pdbId="6VXX" className="w-full h-full" />
+              
+              {/* Interactive Overlay */}
+              <div className="absolute top-6 left-6 z-20 pointer-events-none">
+                <div className="bg-black/80 backdrop-blur-md text-white px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-white/10">
+                  <MousePointer2 className="w-3 h-3 text-indigo-400" />
+                  Interactive 3D Structure
+                </div>
+              </div>
+
+              <div className="absolute bottom-6 right-6 z-20 pointer-events-none">
+                <div className="bg-white/90 backdrop-blur-md text-slate-900 px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black uppercase tracking-widest border border-slate-200 shadow-sm">
+                  <Info className="w-3 h-3 text-indigo-600" />
+                  SARS-CoV-2 Spike Protein (6VXX)
+                </div>
+              </div>
+
+              {/* Interaction Hint */}
+              <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none flex items-center justify-center">
+                <div className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-full p-4 scale-90 group-hover:scale-100 transition-transform">
+                  <p className="text-white text-[10px] font-black uppercase tracking-widest">Click & Drag to Explore</p>
+                </div>
+              </div>
+            </div>
           </div>
           {/* Decorative DNA-like elements */}
-          <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl"></div>
-          <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl"></div>
-        </div>
+          <div className="absolute -top-10 -right-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl animate-pulse"></div>
+        </motion.div>
       </main>
 
       <section className="bg-slate-50 py-32">

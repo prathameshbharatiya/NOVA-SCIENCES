@@ -272,10 +272,22 @@ const Home: React.FC<HomeProps> = ({ onStart }) => {
             </button>
           </div>
 
-          <div className="pt-10 grid grid-cols-1 gap-8 border-t border-slate-100">
+          <div className="pt-10 grid grid-cols-2 lg:grid-cols-4 gap-8 border-t border-slate-100">
             <div>
-              <div className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Rapid</div>
-              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Synthesis Speed</div>
+              <div className="text-3xl font-black text-slate-900 tracking-tighter uppercase">214M+</div>
+              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Protein Structures</div>
+            </div>
+            <div>
+              <div className="text-3xl font-black text-slate-900 tracking-tighter uppercase">250M+</div>
+              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Protein Sequences</div>
+            </div>
+            <div>
+              <div className="text-3xl font-black text-slate-900 tracking-tighter uppercase">62K+</div>
+              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Exp. Data Points</div>
+            </div>
+            <div>
+              <div className="text-3xl font-black text-slate-900 tracking-tighter uppercase">Trillions</div>
+              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Reasoning Tokens</div>
             </div>
           </div>
         </div>
@@ -340,6 +352,54 @@ const Home: React.FC<HomeProps> = ({ onStart }) => {
                 <p className="text-slate-500 font-medium leading-relaxed">{f.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white py-32 border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-10">
+          <div className="grid lg:grid-cols-2 gap-20 items-center">
+            <div className="space-y-8">
+              <h3 className="text-5xl font-black text-slate-900 uppercase tracking-tighter leading-none">
+                The Scale of <br />
+                <span className="text-indigo-600">Intelligence.</span>
+              </h3>
+              <p className="text-xl text-slate-500 font-medium leading-relaxed">
+                nova sciences doesn't just "guess"—it reasons across the largest biological and structural datasets in existence.
+              </p>
+              <div className="grid grid-cols-2 gap-10 pt-10">
+                <div className="space-y-2">
+                  <div className="text-4xl font-black text-slate-900 tracking-tighter uppercase">214M+</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">AlphaFold Structures</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-4xl font-black text-slate-900 tracking-tighter uppercase">250M+</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">UniProt Sequences</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-4xl font-black text-slate-900 tracking-tighter uppercase">62,340</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Exp. Data Points</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Trillions</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Reasoning Tokens</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-slate-50 p-12 rounded-[4rem] border-2 border-slate-100 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-12 opacity-[0.05]">
+                <i className="fa-solid fa-database text-[15rem]"></i>
+              </div>
+              <div className="relative z-10 space-y-6">
+                <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl shadow-xl">
+                  <i className="fa-solid fa-microchip"></i>
+                </div>
+                <h4 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Grounded Reasoning</h4>
+                <p className="text-slate-500 font-medium leading-relaxed">
+                  Every prediction is cross-referenced against industry-standard datasets like ProTherm, FireProtDB, and SKEMPI 2.0, ensuring that our heuristic engine remains grounded in real-world experimental physics.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
